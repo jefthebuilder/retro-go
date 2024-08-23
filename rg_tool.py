@@ -64,7 +64,7 @@ def build_firmware(output_file, apps, fw_format="odroid-go", fatsize=0):
 
     for app in apps:
         part = PROJECT_APPS[app]
-        args += [str(part[0]), str(part[1]), str(part[2]), app, os.path.join(app, "build", app + ".bin")]
+        args += [str(part[0]), str(part[1]), str(part[2]), app, os.path.join("build", app + ".bin")]
 
     run(args)
 
@@ -80,7 +80,7 @@ def build_image(output_file, apps, img_format="esp32", fatsize=0):
     ]
 
     for app in apps:
-        with open(os.path.join(app, "build", app + ".bin"), "rb") as f:
+        with open(os.path.join("build", app + ".bin"), "rb") as f:
             data = f.read()
         part_size = max(PROJECT_APPS[app][2], math.ceil(len(data) / 0x10000) * 0x10000)
         table_csv.append("%s, app, ota_%d, %d, %d" % (app, table_ota, len(image_data), part_size))
@@ -99,8 +99,8 @@ def build_image(output_file, apps, img_format="esp32", fatsize=0):
         table_bin = f.read()
 
     print("Building bootloader...")
-    run([IDF_PY, "bootloader"], cwd=os.path.join(os.getcwd(), list(apps)[0]))
-    with open(os.path.join(os.getcwd(), list(apps)[0], "build", "bootloader", "bootloader.bin"), "rb") as f:
+    run([IDF_PY, "bootloader"])
+    with open(os.path.join("build", "bootloader", "bootloader.bin"), "rb") as f:
         bootloader_bin = f.read()
 
     if img_format == "esp32s3":
@@ -119,12 +119,12 @@ def build_image(output_file, apps, img_format="esp32", fatsize=0):
 def clean_app(app):
     print("Cleaning up app '%s'..." % app)
     try:
-        os.unlink(os.path.join(app, "sdkconfig"))
-        os.unlink(os.path.join(app, "sdkconfig.old"))
+        os.unlink(os.path.join("sdkconfig"))
+        os.unlink(os.path.join("sdkconfig.old"))
     except:
         pass
     try:
-        shutil.rmtree(os.path.join(app, "build"))
+        shutil.rmtree(os.path.join("build"))
     except:
         pass
     print("Done.\n")
@@ -139,7 +139,13 @@ def build_app(app, device_type, with_profiling=False, no_networking=False, is_re
     args.append(f"-DRG_BUILD_RELEASE={1 if is_release else 0}")
     args.append(f"-DRG_ENABLE_PROFILING={1 if with_profiling else 0}")
     args.append(f"-DRG_ENABLE_NETWORKING={0 if no_networking else 1}")
-    run(args, cwd=os.path.join(os.getcwd(), app))
+    args.append(f"-DRG_BUILD_APP={app}")
+    try:
+        os.remove(os.path.join("build", "CMakeCache.txt"))
+    except:
+        pass
+    shutil.rmtree(os.path.join("build", "esp-idf", "main"), True)
+    run(args)
     print("Done.\n")
 
 
@@ -151,7 +157,7 @@ def flash_app(app, port, baudrate=1152000):
         print("Reading device's partition table...")
         run([ESPTOOL_PY, "read_flash", "0x8000", "0x1000", "partitions.bin"], check=False)
         run([GEN_ESP32PART_PY, "partitions.bin"], check=False)
-    app_bin = os.path.join(app, "build", app + ".bin")
+    app_bin = os.path.join("build", app + ".bin")
     print(f"Flashing '{app_bin}' to port {port}")
     run([PARTTOOL_PY, "--partition-table-file", "partitions.bin", "write_partition", "--partition-name", app, "--input", app_bin])
 

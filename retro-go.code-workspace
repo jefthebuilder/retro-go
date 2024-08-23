@@ -1,26 +1,7 @@
 {
 	"folders": [
 		{
-			"path": "components"
-		},
-		{
-			"path": "fmsx"
-		},
-		{
-			"path": "gwenesis"
-		},
-		{
-			"path": "launcher"
-		},
-		{
-			"path": "prboom-go"
-		},
-		{
-			"path": "retro-core"
-		},
-		{
 			"path": ".",
-			"name": "root"
 		}
 	],
 	"settings": {
@@ -43,7 +24,6 @@
 		],
 		"C_Cpp.default.includePath": [
 			"${workspaceFolder}/components/**",
-			"${workspaceFolder}/../components/**",
 			"${config:retro-go.sdk-path}/components/**",
 			"${config:retro-go.tools-path}/include/**"
 		],

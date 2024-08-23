@@ -5,15 +5,15 @@
 #include <time.h>
 #include <math.h>
 
-#include "../components/snes9x/snes9x.h"
-#include "../components/snes9x/soundux.h"
-#include "../components/snes9x/memmap.h"
-#include "../components/snes9x/apu.h"
-#include "../components/snes9x/display.h"
-#include "../components/snes9x/gfx.h"
-#include "../components/snes9x/cpuexec.h"
-#include "../components/snes9x/srtc.h"
-#include "../components/snes9x/save.h"
+#include "../../components/snes9x/snes9x.h"
+#include "../../components/snes9x/soundux.h"
+#include "../../components/snes9x/memmap.h"
+#include "../../components/snes9x/apu.h"
+#include "../../components/snes9x/display.h"
+#include "../../components/snes9x/gfx.h"
+#include "../../components/snes9x/cpuexec.h"
+#include "../../components/snes9x/srtc.h"
+#include "../../components/snes9x/save.h"
 
 #include "keymap_snes.h"
 #include "shared.h"
