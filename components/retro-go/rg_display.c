@@ -199,6 +199,19 @@ static inline void write_update(const rg_surface_t *update)
         {
             int left = display.screen.margins.left + draw_left;
             int top = display.screen.margins.top + draw_top + y - lines_to_copy;
+
+            // // This annoying block is to avoid the on-screen led flickering.
+            // if (config.on_screen_led && top < ON_SCREEN_LED_SIZE && left < ON_SCREEN_LED_SIZE && led_color > 0)
+            // {
+            //     uint16_t color = led_color << 8 | led_color >> 8;
+            //     for (int y = 0; y < 8; ++y)
+            //     {
+            //         if (top + y < 8)
+            //             for (int x = 0; x < ON_SCREEN_LED_SIZE; ++x)
+            //                 line_buffer[y * draw_width + x] = color;
+            //     }
+            // }
+
             if (top != window_top)
                 lcd_set_window(left, top, draw_width, lines_remaining);
             lcd_send_buffer(line_buffer, draw_width * lines_to_copy);
@@ -302,6 +315,43 @@ static bool load_border_file(const char *filename)
     return false;
 }
 
+static void on_screen_indicators(void)
+{
+    // TODO: Respect RG_SCREEN_SAFE_AREA
+    int left = display.screen.width - 20;
+    int top = display.screen.height - 12;
+    static bool cleared = false;
+#if 1 // Just low battery icon
+    if (rg_system_get_indicator(RG_INDICATOR_POWER_LOW))
+    {
+        rg_display_clear_rect(left + 2, top, 14, 10, C_RED);
+        rg_display_clear_rect(left, top + 2, 2, 6, C_RED);
+        rg_display_clear_rect(left + 4, top + 2, 10, 6, C_BLACK);
+        cleared = false;
+    }
+    else if (!cleared)
+    {
+        rg_display_clear_rect(left, top, display.screen.width - left, display.screen.height - top, C_BLACK);
+        memset(&screen_line_checksum[top], 0, sizeof(uint32_t) * (display.screen.height - top));
+        cleared = true;
+    }
+#else // Virtual LED
+    rg_color_t led_color = rg_system_get_led_color();
+    const int led_size = 10;
+    if (led_color > 0)
+    {
+        rg_display_clear_rect(left, top, led_size, led_size, led_color);
+        cleared = false;
+    }
+    else if (!cleared)
+    {
+        rg_display_clear_rect(left, top, led_size, led_size, C_BLACK);
+        memset(&screen_line_checksum[top], 0, sizeof(uint32_t) * led_size);
+        cleared = true;
+    }
+#endif
+}
+
 IRAM_ATTR
 static void display_task(void *arg)
 {
@@ -328,6 +378,8 @@ static void display_task(void *arg)
         }
 
         write_update(msg.dataPtr);
+
+        on_screen_indicators();
 
         rg_task_receive(&msg);
 
