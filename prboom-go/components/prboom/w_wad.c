@@ -127,10 +127,8 @@ static void W_AddFile(wadfile_info_t *wadfile)
   if (!wadfile->data)
   {
     wadfile->handle = fopen(wadfile->name, "rb");
-#ifdef HAVE_NET
     if (!wadfile->handle && D_NetGetWad(wadfile->name)) // CPhipps
       wadfile->handle = fopen(wadfile->name, "rb");
-#endif
     if (wadfile->handle)
     {
       fseek(wadfile->handle, 0, SEEK_END);

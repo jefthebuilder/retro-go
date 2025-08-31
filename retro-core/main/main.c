@@ -23,6 +23,8 @@ void app_main(void)
         gw_main();
     else if (strcmp(app->configNs, "snes") == 0)
         snes_main();
+    else if (strcmp(app->configNs, "cast") == 0)
+        cast_main();
 #ifndef __TINYC__
     else if (strcmp(app->configNs, "lnx") == 0)
         lynx_main();

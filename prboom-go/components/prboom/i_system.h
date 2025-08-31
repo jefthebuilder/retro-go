@@ -33,7 +33,7 @@
 
 #ifndef __I_SYSTEM__
 #define __I_SYSTEM__
-
+extern int ms_to_next_tick;
 bool I_StartDisplay(void);
 void I_EndDisplay(void);
 

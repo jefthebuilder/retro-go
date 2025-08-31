@@ -4,10 +4,11 @@
 #include <ctype.h>
 #include <string.h>
 #include <errno.h>
-
+#include "esp_http_client.h"
 #include "applications.h"
 #include "bookmarks.h"
 #include "gui.h"
+#include "esp_tls.h"
 
 #define CRC_CACHE_MAGIC 0x21112223
 #define CRC_CACHE_MAX_ENTRIES 8192
@@ -123,16 +124,219 @@ static const char *get_file_path(retro_file_t *file)
     return buffer;
 }
 
-static void application_start(retro_file_t *file, int load_state)
+void show_modifiers() {
+    // The third argument (0) is flags, e.g., RG_DIALOG_FLAG_CHECKLIST
+    // This allows multiple selections
+
+}
+void dummy_callback(void* arg) {}
+
+esp_err_t multiplayer_server_event_get_handler(esp_http_client_event_handle_t evt)
 {
+    static char *output_buffer = NULL;  // Accumulates response if user_data not set
+    static int output_len = 0;
+
+    switch (evt->event_id)
+    {
+        case HTTP_EVENT_ON_DATA:
+            RG_LOGI( "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+
+            if (!esp_http_client_is_chunked_response(evt->client)) {
+                if (evt->user_data) {
+                    // Copy response into user-provided buffer
+                    memcpy(evt->user_data + output_len, evt->data, evt->data_len);
+                } else {
+                    // Allocate buffer if first chunk
+                    if (output_buffer == NULL) {
+                        int content_length = esp_http_client_get_content_length(evt->client);
+                        if (content_length <= 0) {
+                            content_length = 1024; // fallback size
+                        }
+                        output_buffer = (char *) malloc(content_length + 1); // +1 for null terminator
+                        if (output_buffer == NULL) {
+                            RG_LOGI( "Failed to allocate memory for output buffer");
+                            return ESP_FAIL;
+                        }
+                        output_len = 0;
+                    }
+                    memcpy(output_buffer + output_len, evt->data, evt->data_len);
+                }
+                output_len += evt->data_len;
+            }
+            break;
+
+        case HTTP_EVENT_ON_FINISH:
+            RG_LOGI( "HTTP_EVENT_ON_FINISH");
+            if (output_buffer != NULL) {
+                output_buffer[output_len] = '\0'; // Null-terminate accumulated response
+                RG_LOGI( "HTTP response: %s", output_buffer);
+                free(output_buffer);
+                output_buffer = NULL;
+            }
+            output_len = 0;
+            break;
+
+        case HTTP_EVENT_DISCONNECTED:
+            RG_LOGI( "HTTP_EVENT_DISCONNECTED");
+            int mbedtls_err = 0;
+            esp_err_t err = esp_tls_get_and_clear_last_error(evt->data, &mbedtls_err, NULL);
+            if (err != 0) {
+                RG_LOGI( "Last esp error code: 0x%x", err);
+                RG_LOGI( "Last mbedtls failure: 0x%x", mbedtls_err);
+            }
+            if (output_buffer != NULL) {
+                free(output_buffer);
+                output_buffer = NULL;
+            }
+            output_len = 0;
+            break;
+
+        default:
+            break;
+    }
+
+    return ESP_OK;
+}
+char* askMultiplayerInfo() {
+    const rg_gui_option_t gamemodes[] = {
+        {1, "DeathMatch", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {2, "Plain old Doom", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {3, "Team DeathMatch", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {5, "Horde Mode", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {6, "Ultra Violence", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {7, "Nightmare Mode", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {8, "Random Map", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        RG_DIALOG_END
+    };
+
+    const rg_gui_option_t modifiers[] = {
+        {1, "Fast Monsters", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {2, "No Monsters", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+    };
+    const rg_gui_option_t options[] = {
+        {1, "Host Game (P1)", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {2, "Find Game (P2)", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        RG_DIALOG_END
+    };
+
+    int ret = rg_gui_dialog("Netplay", options, 0);
+
+    int gamemode = 0;
+    int selected_modifiers[2] = {0};
+    int modifier_count = 0;
+    char* nplayers = 0;
+    char modifiers_str[256] = {0};
+    char* port = "";
+    if (ret == 1) { // Host game
+
+
+        gamemode = rg_gui_dialog("Select Game Mode", gamemodes, 0);
+        int modifier_count = 0;
+        //modifier_count = rg_gui_multiselect("Modifiers", modifiers, 2,selected_modifiers,2);
+        nplayers = rg_gui_input_str("Enter amount of players", "(2-8):", "");
+        int nplayers2 = atoi(nplayers);
+
+        if (nplayers2 < 2 || nplayers2 > 8) {
+            rg_gui_alert("Error", "Invalid amount number!");
+            return NULL;
+        }
+        if (modifier_count > 0) {
+        for (int i = 0; i < modifier_count; i++) {
+                int id = selected_modifiers[i];
+                for (int j = 0; j < 6; j++) {
+                    if (modifiers[j].arg == id) {
+                        strcat(modifiers_str, modifiers[j].label);
+                        break;
+                    }
+                }
+                if (i != modifier_count - 1) strcat(modifiers_str, ",");
+            }
+        }
+    }
+    else {
+
+    port = rg_gui_input_str("Enter Code", "Code (1024-5120):", "");
+    int port_num = atoi(port);
+    if (port_num < 1024 || port_num > 5120) {
+        rg_gui_alert("Error", "Invalid port number!");
+        return NULL;
+    }
+}
+    if (ret == 1) { // Host: send to Flask server
+        char response[512];
+
+        esp_http_client_config_t config = {
+            .url = "http://192.168.1.196:5013/create_game",
+            .method = HTTP_METHOD_POST,
+            .user_data =response,
+            .event_handler = multiplayer_server_event_get_handler
+        };
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+
+        char post_data[512];
+        snprintf(post_data, sizeof(post_data),
+                 "{\"amount\": \"%s\", \"host_ip\": \"%s\", \"gamemode\": %d, \"modifiers\": [\"%s\"]}",
+                 nplayers, "127.0.0.1", gamemode, modifiers_str);
+
+        esp_http_client_set_header(client, "Content-Type", "application/json");
+        esp_http_client_set_post_field(client, post_data, strlen(post_data));
+
+        esp_err_t err = esp_http_client_perform(client);
+        if (err != ESP_OK) {
+            rg_gui_alert("Error", "Failed to contact server!");
+            esp_http_client_cleanup(client);
+            return NULL;
+        }
+
+        const char *buffer = &response;
+        if (buffer) {
+            RG_LOGI("Server response: %s", buffer);
+
+            // Copy only the first 4 characters into port
+            char short_port[5];  // 4 characters + null terminator
+            snprintf(short_port, sizeof(short_port), "%.4s", buffer);
+            port = strdup(short_port);  // copy into your pointer
+
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+                    "Now share the code and let your friends join!\n code: %s", port);
+            rg_gui_alert("notice", buf);
+        }
+
+        esp_http_client_cleanup(client);
+    }
+
+
+    return port;
+}
+static void application_start(retro_file_t *file, int load_state) {
     RG_ASSERT_ARG(file);
+
     char *part = strdup(file->app->partition);
     char *name = strdup(file->app->short_name);
     char *path = strdup(get_file_path(file));
+    RG_LOGE("doom name ");
+    RG_LOGE(name);
+    // Append connection string if the name is "doom multiplayer"
+    if (strcmp(name, "doom Multiplaye") == 0) {
+        size_t new_len = strlen(path) + strlen("| -net 192.168.1.196:1024") + 1;
+        char *new_path = (char *)malloc(new_len);
+        if (new_path) {
+            snprintf(new_path, new_len, "%s| -net 192.168.1.196:%s", path,askMultiplayerInfo());
+            free(path);
+            path = new_path;
+        }
+    }
+
     int flags = (gui.startup_mode ? RG_BOOT_ONCE : 0) | (load_state != -1 ? RG_BOOT_RESUME : 0);
-    bookmark_add(BOOK_TYPE_RECENT, file); // This could relocate *file, but we no longer need it
+
+    bookmark_add(BOOK_TYPE_RECENT, file);
+
+    // Launch the app
     rg_system_switch_app(part, name, path, load_state, flags);
+
 }
+
 
 static uint32_t crc_read_file(retro_file_t *file, bool interactive)
 {
@@ -692,7 +896,9 @@ void applications_init(void)
     // application("Atari 2600", "a26", "a26 zip", "stella-go", 0);
     // application("Neo Geo Pocket Color", "ngp", "ngp ngc zip", "ngpocket-go", 0);
     application("DOOM", "doom", "wad zip", "prboom-go", 0);
+    application("DOOM Multiplayer", "doom Multiplayer", "wad zip", "prboom-go", 0);
     application("MSX", "msx", "rom mx1 mx2 dsk", "fmsx", 0);
+    application("cast", "cast", "txt", "retro-core", 0);
 
     // Special app to bootstrap native esp32 binaries from the SD card
     // application("Bootstrap", "apps", "bin elf", "bootstrap", 0);

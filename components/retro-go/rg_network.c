@@ -22,6 +22,7 @@
 #include <esp_idf_version.h>
 #include <esp_http_client.h>
 #include <esp_system.h>
+#include "esp_mac.h"
 #include <esp_sntp.h>
 #include <esp_wifi.h>
 #include <esp_event.h>
@@ -279,8 +280,15 @@ bool rg_network_init(void)
     netif_sta = esp_netif_create_default_wifi_sta();
     netif_ap = esp_netif_create_default_wifi_ap();
 
-    esp_netif_set_hostname(netif_sta, RG_TARGET_NAME);
-    esp_netif_set_hostname(netif_ap, RG_TARGET_NAME);
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);  // Get STA MAC
+
+    char hostname[32];
+    snprintf(hostname, sizeof(hostname), "%s-%02X%02X", RG_TARGET_NAME, mac[4], mac[5]);
+
+    // Set hostname for STA and AP
+    esp_netif_set_hostname(netif_sta, hostname);
+    esp_netif_set_hostname(netif_ap, hostname);
 
     // Wifi may use nvs for calibration data
     if (nvs_flash_init() != ESP_OK && nvs_flash_erase() == ESP_OK)

@@ -587,33 +587,25 @@ void R_RenderPlayerView (player_t* player)
   }
 
   // check for new console commands.
-#ifdef HAVE_NET
   NetUpdate ();
-#endif
 
   // The head node is the last node output.
   R_RenderBSPNode (numnodes-1);
   R_ResetColumnBuffer();
 
   // Check for new console commands.
-#ifdef HAVE_NET
   NetUpdate ();
-#endif
 
   R_DrawPlanes ();
 
   // Check for new console commands.
-#ifdef HAVE_NET
   NetUpdate ();
-#endif
 
   R_DrawMasked ();
   R_ResetColumnBuffer();
 
   // Check for new console commands.
-#ifdef HAVE_NET
   NetUpdate ();
-#endif
 
   if (rendering_stats) R_ShowStats();
 

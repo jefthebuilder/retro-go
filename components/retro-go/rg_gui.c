@@ -7,7 +7,9 @@
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
-
+#ifdef RG_ENABLE_NETPLAY
+#include "libs/netplay/rg_netplay.h"
+#endif
 #include "bitmaps/image_hourglass.h"
 #include "fonts/fonts.h"
 
@@ -2182,6 +2184,60 @@ void rg_gui_debug_menu(void)
     }
 }
 
+#define MAX_OPTION_LABEL 64
+#define MAX_OPTIONS 12 // safe max for future
+
+
+int rg_gui_multiselect(const char *title, const rg_gui_option_t *options, int max_options, int *selected_ids, int max_selected) {
+    int selected_flags[MAX_OPTIONS] = {0};
+    int count = 0;
+    static char temp_labels[MAX_OPTIONS][MAX_OPTION_LABEL]; // static, persists
+
+    rg_gui_option_t temp_options[MAX_OPTIONS + 2];
+    memcpy(temp_options, options, sizeof(rg_gui_option_t) * max_options);
+
+    temp_options[max_options].arg = 999;
+    temp_options[max_options].label = "Done";
+    temp_options[max_options].value = NULL;
+    temp_options[max_options].flags = RG_DIALOG_FLAG_NORMAL;
+
+    temp_options[max_options + 1].arg = 0;
+    temp_options[max_options + 1].label = NULL;
+    temp_options[max_options + 1].value = NULL;
+    temp_options[max_options + 1].update_cb = NULL;
+    temp_options[max_options + 1].flags = 0;
+
+
+    while (1) {
+        for (int i = 0; i < max_options; i++) {
+            if (options[i].label == NULL) continue;
+
+            if (selected_flags[i]) {
+                snprintf(temp_labels[i], MAX_OPTION_LABEL, "%s *", options[i].label);
+                temp_options[i].label = temp_labels[i];
+            } else {
+                temp_options[i].label = options[i].label;
+            }
+        }
+
+        int choice = rg_gui_dialog(title, temp_options, 0);
+        if (choice == 999) break;
+
+        for (int i = 0; i < max_options; i++) {
+            if (temp_options[i].arg == choice) {
+                selected_flags[i] = !selected_flags[i];
+                break;
+            }
+        }
+    }
+
+    count = 0;
+    for (int i = 0; i < max_options && count < max_selected; i++) {
+        if (selected_flags[i]) selected_ids[count++] = options[i].arg;
+    }
+
+    return count;
+}
 static rg_gui_event_t slot_select_cb(rg_gui_option_t *option, rg_gui_event_t event)
 {
     rg_emu_slot_t *slot = (rg_emu_slot_t *)option->arg;
@@ -2245,9 +2301,7 @@ void rg_gui_game_menu(void)
         {2000, _("Save & Quit"),     NULL, RG_DIALOG_FLAG_NORMAL, NULL},
         {3001, _("Load game"),       NULL, RG_DIALOG_FLAG_NORMAL, NULL},
         {3000, _("Reset"),           NULL, RG_DIALOG_FLAG_NORMAL, NULL},
-        #ifdef RG_ENABLE_NETPLAY
-        {5000, _("Netplay"),         NULL, RG_DIALOG_FLAG_NORMAL, NULL},
-        #endif
+
         {5500, _("Options"),         NULL, have_option_btn ? RG_DIALOG_FLAG_HIDDEN : RG_DIALOG_FLAG_NORMAL, NULL},
         {6000, _("About"),           NULL, RG_DIALOG_FLAG_NORMAL, NULL},
         {7000, _("Quit"),            NULL, RG_DIALOG_FLAG_NORMAL, NULL},
@@ -2276,9 +2330,7 @@ void rg_gui_game_menu(void)
         case 3001: if ((slot = rg_gui_savestate_menu(_("Load"), rom_path)) >= 0) rg_emu_load_state(slot); break;
         case 3002: rg_emu_reset(false); break;
         case 3003: rg_emu_reset(true); break;
-    #ifdef RG_ENABLE_NETPLAY
-        case 5000: rg_netplay_quick_start(); break;
-    #endif
+
         case 5500: rg_gui_options_menu(); break;
         case 6000: rg_gui_about_menu(); break;
         case 7000: rg_system_exit(); break;

@@ -374,6 +374,8 @@ void rg_input_deinit(void)
 
 uint32_t rg_input_read_gamepad(void)
 {
+    //RG_LOGI("Input state. state=" PRINTF_BINARY_16 "\n", PRINTF_BINVAL_16(gamepad_state));
+
 #ifdef RG_TARGET_SDL2
     SDL_PumpEvents();
 #endif

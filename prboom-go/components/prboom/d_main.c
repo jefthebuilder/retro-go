@@ -301,11 +301,7 @@ void D_Display (void)
 
   // menus go directly to the screen
   M_Drawer();          // menu is drawn even on top of everything
-#ifdef HAVE_NET
   NetUpdate();         // send out any new accumulation
-#else
-  D_BuildNewTiccmds();
-#endif
 
   // normal update
   if (!wipe)
@@ -348,6 +344,7 @@ static void D_DoomLoop(void)
       // process one or more tics
       if (singletics)
         {
+
           I_StartTic ();
           G_BuildTiccmd (&netcmds[consoleplayer][maketic%BACKUPTICS]);
           if (advancedemo)
@@ -987,10 +984,8 @@ static void D_DoomMainSetup(void)
   lprintf(LO_INFO, "M_Init: Init miscellaneous info.\n");
   M_Init();
 
-#ifdef HAVE_NET
   // CPhipps - now wait for netgame start
   D_CheckNetGame();
-#endif
 
   lprintf(LO_INFO, "R_Init: Init DOOM refresh daemon:\n");
   R_Init();
@@ -1083,5 +1078,7 @@ static void D_DoomMainSetup(void)
 void D_DoomMain(void)
 {
   D_DoomMainSetup(); // CPhipps - setup out of main execution stack
+  RG_LOGI("setupped");
+
   D_DoomLoop();      // never returns
 }

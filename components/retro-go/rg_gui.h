@@ -147,6 +147,7 @@ void rg_gui_options_menu(void);
 void rg_gui_game_menu(void);
 void rg_gui_about_menu(void);
 void rg_gui_debug_menu(void);
+int rg_gui_multiselect(const char *title,const rg_gui_option_t *options, int max_options, int *selected_ids, int max_selected);
 
 // Creates a 565LE color from C_RGB(255, 255, 255)
 #define C_RGB(r, g, b) ((((r) >> 3) << 11) | (((g) >> 2) << 5) | (((b) & 0x1F)))

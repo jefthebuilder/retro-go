@@ -471,49 +471,49 @@ static void Op89M0(void)
 static void Op24M1(void)
 {
    Direct(true);
-   BIT8();
+   SNES_bit8();
 }
 
 static void Op24M0(void)
 {
    Direct(true);
-   BIT16();
+   SNES_bit16();
 }
 
 static void Op34M1(void)
 {
    DirectIndexedX(true);
-   BIT8();
+   SNES_bit8();
 }
 
 static void Op34M0(void)
 {
    DirectIndexedX(true);
-   BIT16();
+   SNES_bit16();
 }
 
 static void Op2CM1(void)
 {
    Absolute(true);
-   BIT8();
+   SNES_bit8();
 }
 
 static void Op2CM0(void)
 {
    Absolute(true);
-   BIT16();
+   SNES_bit16();
 }
 
 static void Op3CM1(void)
 {
    AbsoluteIndexedX(true);
-   BIT8();
+   SNES_bit8();
 }
 
 static void Op3CM0(void)
 {
    AbsoluteIndexedX(true);
-   BIT16();
+   SNES_bit16();
 }
 
 /* CMP */

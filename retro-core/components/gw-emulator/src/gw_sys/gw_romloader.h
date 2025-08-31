@@ -38,7 +38,7 @@ __license__ = "GPLv3"
 // use to check 'flag_rendering_lcd_inverted' bit0 in rom_head.flags
 // use to check 'flag_segments_4bits'         bit4 in rom_head.flags
 // use to check 'flag_background_jpeg'        bit5 in rom_head.flags
-// use to check 'flag_segments_2bits'         bit8 in rom_head.flags
+// use to check 'flag_segments_2bits'         SNES_bit8 in rom_head.flags
 #define FLAG_RENDERING_LCD_INVERTED 0x01
 #define FLAG_SEGMENTS_4BITS         0x10
 #define FLAG_SEGMENTS_2BITS         0x100

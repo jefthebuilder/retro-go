@@ -8,6 +8,7 @@ extern const rg_audio_driver_t rg_audio_driver_dummy;
 extern const rg_audio_driver_t rg_audio_driver_buzzer;
 extern const rg_audio_driver_t rg_audio_driver_i2s;
 extern const rg_audio_driver_t rg_audio_driver_sdl2;
+extern const rg_audio_driver_t rg_audio_driver_bt_a2dp;
 
 // static const rg_audio_driver_t *drivers[] = {
 //     NULL,
@@ -27,7 +28,7 @@ static const rg_audio_sink_t sinks[] = {
 #if RG_AUDIO_USE_BUZZER_PIN
     {&rg_audio_driver_buzzer, 0, "Buzzer" },
 #endif
-    // {rg_audio_driver_bt_a2dp, 0, "Bluetooth"},
+
 };
 
 #define ACQUIRE_DEVICE(timeout)                         \

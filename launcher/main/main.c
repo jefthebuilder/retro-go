@@ -440,6 +440,7 @@ static void about_handler(rg_gui_option_t *dest)
 
 void app_main(void)
 {
+
     const rg_handlers_t handlers = {
         .event = &event_handler,
         .options = &options_handler,

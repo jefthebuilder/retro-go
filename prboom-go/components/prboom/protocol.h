@@ -47,7 +47,9 @@ enum packet_type_e {
   PKT_DOWN,    // Server downed
   PKT_WAD,     // Wad file request
   PKT_BACKOFF, // Request for client back-off
+  PKT_SYNCPOSITION
 };
+#define PKT_SNAPSHOT 0x53  // 'S'
 
 typedef struct {
   byte checksum;       // Simple checksum of the entire packet

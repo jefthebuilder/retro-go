@@ -30,45 +30,66 @@
  *  Low level network interface.
  *-----------------------------------------------------------------------------*/
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
 
-#ifdef USE_SDL_NET
- #include "SDL_net.h"
- #define UDP_SOCKET UDPsocket
- #define UDP_PACKET UDPpacket
- #define AF_INET
- #define UDP_CHANNEL int
- extern UDP_SOCKET udp_socket;
-#else
- #define UDP_CHANNEL struct sockaddr
-#endif
+#ifndef I_NETWORK_H
+#define I_NETWORK_H
 
-#ifndef IPPORT_RESERVED
-        #define IPPORT_RESERVED 1024
-#endif
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include "protocol.h"
 
+/* SDL_net compatibility typedefs */
+typedef uint16_t Uint16;
+typedef uint8_t  byte;
+typedef int      UDP_SOCKET;   /* socket file descriptor */
+typedef int      UDP_CHANNEL;  /* index into channel map */
+
+/* IPaddress-like struct (SDL_net compatible) */
+typedef struct {
+    uint32_t host;  /* network byte order (same as in_addr.s_addr) */
+    Uint16   port;  /* network byte order port */
+} IPaddress;
+
+/* Global network state */
+extern UDP_CHANNEL sentfrom;     /* channel index of last received packet */
+extern IPaddress   sentfrom_addr;
+extern UDP_SOCKET  udp_socket;   /* UDP socket descriptor */
+extern size_t      sentbytes;    /* Total bytes sent */
+extern size_t      recvdbytes;   /* Total bytes received */
+
+/* Network interface functions */
 void I_InitNetwork(void);
-size_t I_GetPacket(packet_header_t* buffer, size_t buflen);
-void I_SendPacket(packet_header_t* packet, size_t len);
-void I_WaitForPacket(int ms);
+void I_ShutdownNetwork(void);
 
-#ifdef USE_SDL_NET
 UDP_SOCKET I_Socket(Uint16 port);
+void I_CloseSocket(UDP_SOCKET sock);
+
 int I_ConnectToServer(const char *serv);
+void I_Disconnect(void);
+
 UDP_CHANNEL I_RegisterPlayer(IPaddress *ipaddr);
 void I_UnRegisterPlayer(UDP_CHANNEL channel);
-extern IPaddress sentfrom_addr;
-#endif
 
-#ifdef AF_INET
+size_t I_GetPacket(packet_header_t* buffer, size_t buflen);
+void I_SendPacket(packet_header_t* packet, size_t len);
 void I_SendPacketTo(packet_header_t* packet, size_t len, UDP_CHANNEL *to);
-void I_SetupSocket(int sock, int port, int family);
+
+void I_WaitForPacket(int ms);
 void I_PrintAddress(FILE* fp, UDP_CHANNEL *addr);
 
-extern UDP_CHANNEL sentfrom;
-extern int v4socket, v6socket;
-#endif
+/* Packet alloc/free helpers (SDL_net compatibility) */
+typedef struct {
+    byte *data;
+    int   maxlen;
+    int   len;
+    UDP_CHANNEL channel;
+    struct sockaddr_in address;
+} UDP_PACKET;
 
-extern size_t sentbytes, recvdbytes;
+UDP_PACKET *I_AllocPacket(int size);
+void I_FreePacket(UDP_PACKET *packet);
+
+#endif /* I_NETWORK_H */

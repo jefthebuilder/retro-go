@@ -59,8 +59,9 @@
 #include "d_main.h"
 #include "g_game.h"
 #include "m_menu.h"
+#include <rg_system.h>
+#include <rg_network.h>
 
-#include "protocol.h"
 #include "i_network.h"
 #include "i_system.h"
 #include "i_main.h"
@@ -68,7 +69,7 @@
 #include "m_argv.h"
 #include "r_fps.h"
 #include "lprintf.h"
-
+#include "net_snapshot.h"
 ticcmd_t         netcmds[MAXPLAYERS][BACKUPTICS];
 static ticcmd_t* localcmds;
 int maketic;
@@ -76,7 +77,6 @@ int ticdup = 1;
 
 static boolean isExtraDDisplay = false;
 
-#ifdef HAVE_NET
 static boolean   server;
 static int       remotetic; // Tic expected from the remote
 static int       remotesend; // Tic expected by the remote
@@ -93,9 +93,19 @@ void D_InitNetGame (void)
   int numplayers = 1;
 
   i = M_CheckParm("-net");
+
+  if (i == 0){
+    consoleplayer = displayplayer = 0;
+    localcmds = netcmds[consoleplayer];
+    for (int i = 0; i<MAXPLAYERS; i++)
+    playeringame[i] = false;
+    playeringame[consoleplayer] = true;
+    return;
+  }
+  RG_LOGI("creating net game!!");
   if (i && i < myargc-1) i++;
 
-  if (!(netgame = server =  !!i)) {
+  if (!(netgame = server =  !!i) ){
     playeringame[consoleplayer = 0] = true;
     // e6y
     // for play, recording or playback using "single-player coop" mode.
@@ -106,19 +116,35 @@ void D_InitNetGame (void)
     packet_header_t *packet = Z_Malloc(1000, PU_STATIC, NULL);
     struct setup_packet_s *sinfo = (void*)(packet+1);
   struct { packet_header_t head; short pn; } PACKEDATTR initpacket;
+    rg_network_init();
+    rg_network_wifi_start();
+    if (rg_network_get_info().state != RG_NETWORK_CONNECTED)
+    {
+        int retry = 0;
+        while (rg_network_get_info().state != RG_NETWORK_CONNECTED && retry++ < 50)
+        {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (rg_network_get_info().state != RG_NETWORK_CONNECTED)
+        {
+            RG_LOGI(stderr, "Warning: WiFi not connected, proceeding anyway.\n");
+        }
+    }
+    RG_LOGI("connected to wifi");
 
     I_InitNetwork();
   udp_socket = I_Socket(0);
   I_ConnectToServer(myargv[i]);
-
+    // warn end user that it will take some time before game starts
+    rg_gui_alert("MULTIPLAYER ALERT","game will only start after it\n reaches a certain amount of players\n press continue to go further\n if you want to leave hold home button after continue");
     do
     {
       do {
-	// Send init packet
-	initpacket.pn = doom_htons(wanted_player_number);
-	packet_set(&initpacket.head, PKT_INIT, 0);
-	I_SendPacket(&initpacket.head, sizeof(initpacket));
-	I_WaitForPacket(5000);
+        // Send init packet
+        initpacket.pn = doom_htons(wanted_player_number);
+        packet_set(&initpacket.head, PKT_INIT, 0);
+        I_SendPacket(&initpacket.head, sizeof(initpacket));
+        I_WaitForPacket(5000);
       } while (!I_GetPacket(packet, 1000));
       if (packet->type == PKT_DOWN) I_Error("Server aborted the game");
     } while (packet->type != PKT_SETUP);
@@ -141,12 +167,12 @@ void D_InitNetGame (void)
     lprintf(LO_INFO, "\tjoined game as player %d/%d; %d WADs specified\n",
       consoleplayer+1, numplayers = sinfo->players, sinfo->numwads);
     {
-      char *p = sinfo->wadnames;
+      char *p = (char *)sinfo->wadnames;
       int i = sinfo->numwads;
 
       while (i--) {
-  D_AddFile(p, source_net);
-  p += strlen(p) + 1;
+      D_AddFile(p);
+      p += strlen(p) + 1;
       }
     }
     Z_Free(packet);
@@ -158,21 +184,12 @@ void D_InitNetGame (void)
     playeringame[i] = false;
   if (!playeringame[consoleplayer]) I_Error("D_InitNetGame: consoleplayer not in game");
 }
-#else
-void D_InitNetGame (void)
-{
-  netgame = (M_CheckParm("-solo-net") != 0);
-  consoleplayer = displayplayer = 0;
-  localcmds = netcmds[consoleplayer];
-  for (int i = 0; i<MAXPLAYERS; i++)
-    playeringame[i] = false;
-  playeringame[consoleplayer] = true;
-}
-#endif // HAVE_NET
 
-#ifdef HAVE_NET
+
+
 void D_CheckNetGame(void)
 {
+
   packet_header_t *packet = Z_Malloc(sizeof(packet_header_t)+1, PU_STATIC, NULL);
 
   if (server) {
@@ -251,9 +268,54 @@ boolean D_NetGetWad(const char* name)
   return false;
 #endif
 }
+void CL_SendSyncPosition(void)
+{
+    // Allocate: header + payload (payload = data only, no header inside)
+  size_t pkt_size = sizeof(packet_header_t) + sizeof(pkt_syncposition_payload_t);
+  packet_header_t *packet = Z_Malloc(pkt_size, PU_STATIC, NULL);
+
+  packet_set(packet, PKT_SYNCPOSITION, gametic);
+
+  // Use byte pointer like in PKT_TICC
+  byte *payload_ptr = ((byte*)packet) + sizeof(packet_header_t);
+  pkt_syncposition_payload_t *p = (pkt_syncposition_payload_t *)payload_ptr;
+
+  p->player_id = consoleplayer;
+  p->x         = players[consoleplayer].mo->x;
+  p->y         = players[consoleplayer].mo->y;
+  p->z         = players[consoleplayer].mo->z;
+  p->angle     = players[consoleplayer].mo->angle;
+  p->velocityx = players[consoleplayer].mo->momx;
+  p->velocityy = players[consoleplayer].mo->momy;
+  p->health = players[consoleplayer].mo->health;
+  p->state = players[consoleplayer].playerstate;
+  I_SendPacket(packet, pkt_size);
+  Z_Free(packet);
+
+}
+
 
 void NetUpdate(void)
 {
+  if (!netgame){
+    static int lastmadetic;
+    int newtics = I_GetTime() - lastmadetic;
+    lastmadetic += newtics;
+    while (newtics--)
+    {
+      I_StartTic();
+      if (maketic - gametic > BACKUPTICS/2) break;
+      G_BuildTiccmd(&localcmds[maketic%BACKUPTICS]);
+      maketic++;
+    }
+    return;
+  }
+  if (netgame && (gametic % 25 == 0)) { // every 10 tics
+    CL_SendSyncPosition();
+}
+  if (consoleplayer == 0 && netgame){
+    NET_Snapshot_SetIsHost(1);
+  }
   static int lastmadetic;
   if (isExtraDDisplay)
     return;
@@ -300,12 +362,56 @@ void NetUpdate(void)
   break;
       case PKT_EXTRA: // Misc stuff
       case PKT_QUIT: // Player quit
-  // Queue packet to be processed when its tic time is reached
-  queuedpacket = Z_Realloc(queuedpacket, ++numqueuedpackets * sizeof *queuedpacket,
-         PU_STATIC, NULL);
-  queuedpacket[numqueuedpackets-1] = Z_Malloc(recvlen, PU_STATIC, NULL);
-  memcpy(queuedpacket[numqueuedpackets-1], packet, recvlen);
+      // Queue packet to be processed when its tic time is reached
+      queuedpacket = Z_Realloc(queuedpacket, ++numqueuedpackets * sizeof *queuedpacket,
+            PU_STATIC, NULL);
+      queuedpacket[numqueuedpackets-1] = Z_Malloc(recvlen, PU_STATIC, NULL);
+      memcpy(queuedpacket[numqueuedpackets-1], packet, recvlen);
   break;
+      case PKT_SNAPSHOT:
+      byte *payload = (byte *)packet + sizeof(packet_header_t);
+        NET_Snapshot_Receive(payload, sizeof(payload));
+      break;
+      case PKT_SYNCPOSITION: {
+        RG_LOGI("received sync position expected size %u %u",sizeof(packet_header_t), sizeof(pkt_syncposition_payload_t));
+        if (recvlen < sizeof(packet_header_t) + sizeof(pkt_syncposition_payload_t)) {
+            RG_LOGI("Sync packet too small: %u bytes", recvlen);
+            break;
+        }
+        // Skip the header to get the payload
+        pkt_syncposition_payload_t *p = (pkt_syncposition_payload_t *)((byte *)packet + sizeof(packet_header_t));
+        // Ignore updates about ourselves
+        if (p->player_id == consoleplayer)
+            break;
+
+
+        // Ignore updates about ourselves
+        if (p->player_id >= MAXPLAYERS) {
+          RG_LOGI("Invalid player_id %d in sync packet", p->player_id);
+          break;
+        }
+        if (!playeringame[p->player_id]) {
+            RG_LOGI("Player %d not in game", p->player_id);
+            break;
+        }
+        RG_LOGI("Sync player_id: %d", p->player_id);
+
+        player_t *pl = &players[p->player_id];
+
+        // Update the other player's state
+        pl->mo->x     = p->x;
+        pl->mo->y     = p->y;
+        pl->mo->z     = p->z;
+        pl->mo->angle = p->angle;
+        pl->mo->health = p->health;
+        pl->mo->momx  = p->velocityx;
+        pl->mo->momy  = p->velocityy;
+        pl->playerstate = p->state;
+        break;
+    }
+
+      break;
+
       case PKT_BACKOFF:
         /* cph 2003-09-18 -
 	 * The server sends this when we have got ahead of the other clients. We should
@@ -355,7 +461,6 @@ void NetUpdate(void)
     }
   }
 }
-#else
 
 void D_BuildNewTiccmds(void)
 {
@@ -370,12 +475,13 @@ void D_BuildNewTiccmds(void)
       maketic++;
     }
 }
-#endif
 
-#ifdef HAVE_NET
 /* cph - data passed to this must be in the Doom (little-) endian */
 void D_NetSendMisc(netmisctype_t type, size_t len, void* data)
 {
+  if (M_CheckParm("-net") == 0){
+    return;
+  }
   if (server) {
     size_t size = sizeof(packet_header_t) + 3*sizeof(int) + len;
     packet_header_t *packet = Z_Malloc(size, PU_STATIC, NULL);
@@ -440,7 +546,6 @@ static void CheckQueuedPackets(void)
     numqueuedpackets = newnum; queuedpacket = newqueue;
   }
 }
-#endif // HAVE_NET
 
 void TryRunTics (void)
 {
@@ -449,24 +554,20 @@ void TryRunTics (void)
 
   // Wait for tics to run
   while (1) {
-#ifdef HAVE_NET
+
     NetUpdate();
     runtics = (server ? remotetic : maketic) - gametic;
-#else
-    D_BuildNewTiccmds();
     runtics = maketic - gametic;
-#endif
+
     if (!runtics) {
       if (!movement_smooth) {
-#ifdef HAVE_NET
+
         if (server)
           I_WaitForPacket(ms_to_next_tick);
         else
-#endif
-          // I_uSleep(ms_to_next_tick*1000);
+          I_uSleep(ms_to_next_tick*1000);
       }
       if (I_GetTime() - entertime > 10) {
-#ifdef HAVE_NET
         if (server) {
           char buf[sizeof(packet_header_t)+1];
           remotesend--;
@@ -474,7 +575,6 @@ void TryRunTics (void)
           buf[sizeof(buf)-1] = consoleplayer;
           I_SendPacket((packet_header_t *)buf, sizeof buf);
         }
-#endif
         M_Ticker(); return;
       }
       //if ((displaytime) < (tic_vars.next-SDL_GetTicks()))
@@ -491,11 +591,11 @@ void TryRunTics (void)
   }
 
   while (runtics--) {
-#ifdef HAVE_NET
     if (server) CheckQueuedPackets();
-#endif
-    if (advancedemo)
+    if (advancedemo){
+
       D_DoAdvanceDemo ();
+    }
     M_Ticker ();
     if (movement_smooth) {
       tic_vars.start = I_GetTimeMS();
@@ -504,13 +604,11 @@ void TryRunTics (void)
     }
     G_Ticker ();
     gametic++;
-#ifdef HAVE_NET
     NetUpdate(); // Keep sending our tics to avoid stalling remote nodes
-#endif
+
   }
 }
 
-#ifdef HAVE_NET
 static void D_QuitNetGame (void)
 {
   byte buf[1 + sizeof(packet_header_t)];
@@ -526,4 +624,3 @@ static void D_QuitNetGame (void)
     I_uSleep(10000);
   }
 }
-#endif

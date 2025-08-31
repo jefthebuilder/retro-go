@@ -110,7 +110,7 @@ enum
 
 typedef struct
 {
-   int PS;		// Processor status register   8 bits
+   int PS2;		// Processor status register   8 bits
    int A;		// Accumulator                 8 bits
    int X;		// X index register            8 bits
    int Y;		// Y index register            8 bits
@@ -191,14 +191,14 @@ class C65C02
       inline bool ContextSave(LSS_FILE *fp)
       {
          TRACE_CPU0("ContextSave()");
-         int mPS;
-         mPS=PS();
+         int mPS2;
+         mPS2=PS2();
          if(!lss_printf(fp,"C6502::ContextSave")) return 0;
          if(!lss_write(&mA,sizeof(ULONG),1,fp)) return 0;
          if(!lss_write(&mX,sizeof(ULONG),1,fp)) return 0;
          if(!lss_write(&mY,sizeof(ULONG),1,fp)) return 0;
          if(!lss_write(&mSP,sizeof(ULONG),1,fp)) return 0;
-         if(!lss_write(&mPS,sizeof(ULONG),1,fp)) return 0;
+         if(!lss_write(&mPS2,sizeof(ULONG),1,fp)) return 0;
          if(!lss_write(&mPC,sizeof(ULONG),1,fp)) return 0;
          if(!lss_write(&mIRQActive,sizeof(ULONG),1,fp)) return 0;
          return 1;
@@ -207,7 +207,7 @@ class C65C02
       inline bool ContextLoad(LSS_FILE *fp)
       {
          TRACE_CPU0("ContextLoad()");
-         int mPS;
+         int mPS2;
          char teststr[32]="XXXXXXXXXXXXXXXXXX";
          if(!lss_read(teststr,sizeof(char),18,fp)) return 0;
          if(strcmp(teststr,"C6502::ContextSave")!=0) return 0;
@@ -215,10 +215,10 @@ class C65C02
          if(!lss_read(&mX,sizeof(ULONG),1,fp)) return 0;
          if(!lss_read(&mY,sizeof(ULONG),1,fp)) return 0;
          if(!lss_read(&mSP,sizeof(ULONG),1,fp)) return 0;
-         if(!lss_read(&mPS,sizeof(ULONG),1,fp)) return 0;
+         if(!lss_read(&mPS2,sizeof(ULONG),1,fp)) return 0;
          if(!lss_read(&mPC,sizeof(ULONG),1,fp)) return 0;
          if(!lss_read(&mIRQActive,sizeof(ULONG),1,fp)) return 0;
-         PS(mPS);
+         PS2(mPS2);
          return 1;
       }
 
@@ -237,7 +237,7 @@ class C65C02
          //				// Push processor status
          //				CPU_POKE(0x0100+mSP--,mPC>>8);
          //				CPU_POKE(0x0100+mSP--,mPC&0x00ff);
-         //				CPU_POKE(0x0100+mSP--,PS());
+         //				CPU_POKE(0x0100+mSP--,PS2());
          //
          //				// Pick up the new PC
          //				mPC=CPU_PEEKW(NMI_VECTOR);
@@ -252,7 +252,7 @@ class C65C02
             // Push processor status
             PUSH(mPC>>8);
             PUSH(mPC&0xff);
-            PUSH(PS()&0xef);		// Clear B flag on stack
+            PUSH(PS2()&0xef);		// Clear B flag on stack
 
             mI=TRUE;				// Stop further interrupts
             mD=FALSE;				// Clear decimal mode
@@ -1716,7 +1716,7 @@ class C65C02
 
       inline void SetRegs(C6502_REGS &regs)
       {
-         PS(regs.PS);
+         PS2(regs.PS2);
          mA=regs.A;
          mX=regs.X;
          mY=regs.Y;
@@ -1734,7 +1734,7 @@ class C65C02
 
       inline void GetRegs(C6502_REGS &regs)
       {
-         regs.PS=PS();
+         regs.PS2=PS2();
          regs.A=mA;
          regs.X=mX;
          regs.Y=mY;
@@ -1797,30 +1797,30 @@ class C65C02
    private:
 
       // Answers value of the Processor Status register
-      int PS() const
+      int PS2() const
       {
-         UBYTE ps = 0x20;
-         if(mN) ps|=0x80;
-         if(mV) ps|=0x40;
-         if(mB) ps|=0x10;
-         if(mD) ps|=0x08;
-         if(mI) ps|=0x04;
-         if(mZ) ps|=0x02;
-         if(mC) ps|=0x01;
-         return ps;
+         UBYTE PS2 = 0x20;
+         if(mN) PS2|=0x80;
+         if(mV) PS2|=0x40;
+         if(mB) PS2|=0x10;
+         if(mD) PS2|=0x08;
+         if(mI) PS2|=0x04;
+         if(mZ) PS2|=0x02;
+         if(mC) PS2|=0x01;
+         return PS2;
       }
 
 
       // Change the processor flags to correspond to the given value
-      void PS(int ps)
+      void PS2(int PS2)
       {
-         mN=ps&0x80;
-         mV=ps&0x40;
-         mB=ps&0x10;
-         mD=ps&0x08;
-         mI=ps&0x04;
-         mZ=ps&0x02;
-         mC=ps&0x01;
+         mN=PS2&0x80;
+         mV=PS2&0x40;
+         mB=PS2&0x10;
+         mD=PS2&0x08;
+         mI=PS2&0x04;
+         mZ=PS2&0x02;
+         mC=PS2&0x01;
       }
 
 };

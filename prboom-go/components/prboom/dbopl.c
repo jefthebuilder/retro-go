@@ -115,7 +115,7 @@
 #error Too many envelope bits
 #endif
 
-static inline void Operator__SetState(Operator *self, Bit8u s );
+static inline void Operator__SetState(Operator *self, DOOM_bit8U s );
 static inline Bit32u Chip__ForwardNoise(Chip *self);
 
 // C++'s template<> sure is useful sometimes.
@@ -142,7 +142,7 @@ BLOCK_TEMPLATE(sm2Percussion)
 BLOCK_TEMPLATE(sm3Percussion)
 
 //How much to substract from the base value for the final attenuation
-static const Bit8u KslCreateTable[16] = {
+static const DOOM_bit8U KslCreateTable[16] = {
   //0 will always be be lower than 7 * 8
   64, 32, 24, 19,
   16, 12, 11, 10,
@@ -150,22 +150,22 @@ static const Bit8u KslCreateTable[16] = {
    3,  2,  1,  0,
 };
 
-#define M(_X_) ((Bit8u)( (_X_) * 2))
-static const Bit8u FreqCreateTable[16] = {
+#define M(_X_) ((DOOM_bit8U)( (_X_) * 2))
+static const DOOM_bit8U FreqCreateTable[16] = {
   M(0.5), M(1 ), M(2 ), M(3 ), M(4 ), M(5 ), M(6 ), M(7 ),
   M(8  ), M(9 ), M(10), M(10), M(12), M(12), M(15), M(15)
 };
 #undef M
 
 //We're not including the highest attack rate, that gets a special value
-static const Bit8u AttackSamplesTable[13] = {
+static const DOOM_bit8U AttackSamplesTable[13] = {
   69, 55, 46, 40,
   35, 29, 23, 20,
   19, 15, 11, 10,
   9
 };
 //On a real opl these values take 8 samples to reach and are based upon larger tables
-static const Bit8u EnvelopeIncreaseTable[13] = {
+static const DOOM_bit8U EnvelopeIncreaseTable[13] = {
   4,  5,  6,  7,
   8, 10, 12, 14,
   16, 20, 24, 28,
@@ -173,12 +173,12 @@ static const Bit8u EnvelopeIncreaseTable[13] = {
 };
 
 #if ( DBOPL_WAVE == WAVE_HANDLER ) || ( DBOPL_WAVE == WAVE_TABLELOG )
-static Bit16u ExpTable[ 256 ];
+static DOOM_bit16u ExpTable[ 256 ];
 #endif
 
 #if ( DBOPL_WAVE == WAVE_HANDLER )
 //PI table used by WAVEHANDLER
-static Bit16u SinTable[ 512 ];
+static DOOM_bit16u SinTable[ 512 ];
 #endif
 
 #if ( DBOPL_WAVE > WAVE_HANDLER )
@@ -191,52 +191,52 @@ static Bit16u SinTable[ 512 ];
 
 //6 is just 0 shifted and masked
 
-static Bit16s WaveTable[ 8 * 512 ];
+static DOOM_bit16s WaveTable[ 8 * 512 ];
 //Distance into WaveTable the wave starts
-static const Bit16u WaveBaseTable[8] = {
+static const DOOM_bit16u WaveBaseTable[8] = {
   0x000, 0x200, 0x200, 0x800,
   0xa00, 0xc00, 0x100, 0x400,
 
 };
 //Mask the counter with this
-static const Bit16u WaveMaskTable[8] = {
+static const DOOM_bit16u WaveMaskTable[8] = {
   1023, 1023, 511, 511,
   1023, 1023, 512, 1023,
 };
 
 //Where to start the counter on at keyon
-static const Bit16u WaveStartTable[8] = {
+static const DOOM_bit16u WaveStartTable[8] = {
   512, 0, 0, 0,
   0, 512, 512, 256,
 };
 #endif
 
 #if ( DBOPL_WAVE == WAVE_TABLEMUL )
-static Bit16u MulTable[ 384 ];
+static DOOM_bit16u MulTable[ 384 ];
 #endif
 
-static Bit8u KslTable[ 8 * 16 ];
-static Bit8u TremoloTable[ TREMOLO_TABLE ];
+static DOOM_bit8U KslTable[ 8 * 16 ];
+static DOOM_bit8U TremoloTable[ TREMOLO_TABLE ];
 //Start of a channel behind the chip struct start
-static Bit16u ChanOffsetTable[32];
+static DOOM_bit16u ChanOffsetTable[32];
 //Start of an operator behind the chip struct start
-static Bit16u OpOffsetTable[64];
+static DOOM_bit16u OpOffsetTable[64];
 
 //The lower bits are the shift of the operator vibrato value
 //The highest bit is right shifted to generate -1 or 0 for negation
 //So taking the highest input value of 7 this gives 3, 7, 3, 0, -3, -7, -3, 0
-static const Bit8s VibratoTable[ 8 ] = {
+static const SNES_bit8s VibratoTable[ 8 ] = {
   1 - 0x00, 0 - 0x00, 1 - 0x00, 30 - 0x00,
   1 - 0x80, 0 - 0x80, 1 - 0x80, 30 - 0x80
 };
 
 //Shift strength for the ksl value determined by ksl strength
-static const Bit8u KslShiftTable[4] = {
+static const DOOM_bit8U KslShiftTable[4] = {
   31,1,2,0
 };
 
 //Generate a table index and table shift value using input value from a selected rate
-static void EnvelopeSelect( Bit8u val, Bit8u *index, Bit8u *shift ) {
+static void EnvelopeSelect( DOOM_bit8U val, DOOM_bit8U *index, DOOM_bit8U *shift ) {
   if ( val < 13 * 4 ) {       //Rate 0 - 12
     *shift = 12 - ( val >> 2 );
     *index = val & 3;
@@ -327,9 +327,9 @@ static const WaveHandler WaveHandlerTable[8] = {
 
 //We zero out when rate == 0
 static inline void Operator__UpdateAttack(Operator *self, const Chip* chip ) {
-  Bit8u rate = self->reg60 >> 4;
+  DOOM_bit8U rate = self->reg60 >> 4;
   if ( rate ) {
-    Bit8u val = (rate << 2) + self->ksr;
+    DOOM_bit8U val = (rate << 2) + self->ksr;
     self->attackAdd = chip->attackRates[ val ];
     self->rateZero &= ~(1 << ATTACK);
   } else {
@@ -338,9 +338,9 @@ static inline void Operator__UpdateAttack(Operator *self, const Chip* chip ) {
   }
 }
 static inline void Operator__UpdateDecay(Operator *self, const Chip* chip ) {
-  Bit8u rate = self->reg60 & 0xf;
+  DOOM_bit8U rate = self->reg60 & 0xf;
   if ( rate ) {
-    Bit8u val = (rate << 2) + self->ksr;
+    DOOM_bit8U val = (rate << 2) + self->ksr;
     self->decayAdd = chip->linearRates[ val ];
     self->rateZero &= ~(1 << DECAY);
   } else {
@@ -349,9 +349,9 @@ static inline void Operator__UpdateDecay(Operator *self, const Chip* chip ) {
   }
 }
 static inline void Operator__UpdateRelease(Operator *self, const Chip* chip ) {
-  Bit8u rate = self->reg80 & 0xf;
+  DOOM_bit8U rate = self->reg80 & 0xf;
   if ( rate ) {
-    Bit8u val = (rate << 2) + self->ksr;
+    DOOM_bit8U val = (rate << 2) + self->ksr;
     self->releaseAdd = chip->linearRates[ val ];
     self->rateZero &= ~(1 << RELEASE);
     if ( !(self->reg20 & MASK_SUSTAIN ) ) {
@@ -367,9 +367,9 @@ static inline void Operator__UpdateRelease(Operator *self, const Chip* chip ) {
 }
 
 static inline void Operator__UpdateAttenuation(Operator *self) {
-  Bit8u kslBase = (Bit8u)((self->chanData >> SHIFT_KSLBASE) & 0xff);
+  DOOM_bit8U kslBase = (DOOM_bit8U)((self->chanData >> SHIFT_KSLBASE) & 0xff);
   Bit32u tl = self->reg40 & 0x3f;
-  Bit8u kslShift = KslShiftTable[ self->reg40 >> 6 ];
+  DOOM_bit8U kslShift = KslShiftTable[ self->reg40 >> 6 ];
   //Make sure the attenuation goes to the right bits
   self->totalLevel = tl << ( ENV_BITS - 7 );  //Total level goes 2 bits below max
   self->totalLevel += ( kslBase << ENV_EXTRA ) >> kslShift;
@@ -385,7 +385,7 @@ static void Operator__UpdateFrequency(Operator *self) {
   self->waveAdd = ( freq << block ) * self->freqMul;
 #endif
   if ( self->reg20 & MASK_VIBRATO ) {
-    self->vibStrength = (Bit8u)(freq >> 7);
+    self->vibStrength = (DOOM_bit8U)(freq >> 7);
 
 #ifdef WAVE_PRECISION
     self->vibrato = ( self->vibStrength * self->freqMul ) >> block;
@@ -401,7 +401,7 @@ static void Operator__UpdateFrequency(Operator *self) {
 static void Operator__UpdateRates(Operator *self, const Chip* chip ) {
   //Mame seems to reverse this where enabling ksr actually lowers
   //the rate, but pdf manuals says otherwise?
-  Bit8u newKsr = (Bit8u)((self->chanData >> SHIFT_KEYCODE) & 0xff);
+  DOOM_bit8U newKsr = (DOOM_bit8U)((self->chanData >> SHIFT_KEYCODE) & 0xff);
   if ( !( self->reg20 & MASK_KSR ) ) {
     newKsr >>= 2;
   }
@@ -502,13 +502,13 @@ static inline Bitu Operator__ForwardWave(Operator *self) {
   return self->waveIndex >> WAVE_SH;
 }
 
-static void Operator__Write20(Operator *self, const Chip* chip, Bit8u val ) {
-  Bit8u change = (self->reg20 ^ val );
+static void Operator__Write20(Operator *self, const Chip* chip, DOOM_bit8U val ) {
+  DOOM_bit8U change = (self->reg20 ^ val );
   if ( !change )
     return;
   self->reg20 = val;
   //Shift the tremolo bit over the entire register, saved a branch, YES!
-  self->tremoloMask = (Bit8s)(val) >> 7;
+  self->tremoloMask = (SNES_bit8s)(val) >> 7;
   self->tremoloMask &= ~(( 1 << ENV_EXTRA ) -1);
   //Update specific features based on changes
   if ( change & MASK_KSR ) {
@@ -527,15 +527,15 @@ static void Operator__Write20(Operator *self, const Chip* chip, Bit8u val ) {
   }
 }
 
-static void Operator__Write40(Operator *self, const Chip *chip, Bit8u val ) {
+static void Operator__Write40(Operator *self, const Chip *chip, DOOM_bit8U val ) {
   if (!(self->reg40 ^ val ))
     return;
   self->reg40 = val;
   Operator__UpdateAttenuation( self );
 }
 
-static void Operator__Write60(Operator *self, const Chip* chip, Bit8u val ) {
-  Bit8u change = self->reg60 ^ val;
+static void Operator__Write60(Operator *self, const Chip* chip, DOOM_bit8U val ) {
+  DOOM_bit8U change = self->reg60 ^ val;
   self->reg60 = val;
   if ( change & 0x0f ) {
     Operator__UpdateDecay( self, chip );
@@ -545,9 +545,9 @@ static void Operator__Write60(Operator *self, const Chip* chip, Bit8u val ) {
   }
 }
 
-static void Operator__Write80(Operator *self, const Chip* chip, Bit8u val ) {
-  Bit8u change = (self->reg80 ^ val );
-  Bit8u sustain;
+static void Operator__Write80(Operator *self, const Chip* chip, DOOM_bit8U val ) {
+  DOOM_bit8U change = (self->reg80 ^ val );
+  DOOM_bit8U sustain;
   if ( !change )
     return;
   self->reg80 = val;
@@ -560,8 +560,8 @@ static void Operator__Write80(Operator *self, const Chip* chip, Bit8u val ) {
   }
 }
 
-static void Operator__WriteE0(Operator *self, const Chip* chip, Bit8u val ) {
-  Bit8u waveForm;
+static void Operator__WriteE0(Operator *self, const Chip* chip, DOOM_bit8U val ) {
+  DOOM_bit8U waveForm;
   if ( !(self->regE0 ^ val) )
     return;
   //in opl3 mode you can always selet 7 waveforms regardless of waveformselect
@@ -576,7 +576,7 @@ static void Operator__WriteE0(Operator *self, const Chip* chip, Bit8u val ) {
 #endif
 }
 
-static inline void Operator__SetState(Operator *self, Bit8u s ) {
+static inline void Operator__SetState(Operator *self, DOOM_bit8U s ) {
   self->state = s;
   self->volHandler = VolumeHandlerTable[ s ];
 }
@@ -602,7 +602,7 @@ static inline void Operator__Prepare(Operator *self, const Chip* chip )  {
   }
 }
 
-static void Operator__KeyOn(Operator *self, Bit8u mask ) {
+static void Operator__KeyOn(Operator *self, DOOM_bit8U mask ) {
   if ( !self->keyOn ) {
     //Restart the frequency generator
 #if( DBOPL_WAVE > WAVE_HANDLER )
@@ -616,7 +616,7 @@ static void Operator__KeyOn(Operator *self, Bit8u mask ) {
   self->keyOn |= mask;
 }
 
-static void Operator__KeyOff(Operator *self, Bit8u mask ) {
+static void Operator__KeyOff(Operator *self, DOOM_bit8U mask ) {
   self->keyOn &= ~mask;
   if ( !self->keyOn ) {
     if ( self->state != OFF ) {
@@ -717,7 +717,7 @@ static void Channel__SetChanData(Channel *self, const Chip* chip, Bit32u data ) 
   }
 }
 
-static void Channel__UpdateFrequency(Channel *self, const Chip* chip, Bit8u fourOp ) {
+static void Channel__UpdateFrequency(Channel *self, const Chip* chip, DOOM_bit8U fourOp ) {
   //Extrace the frequency bits
   Bit32u data = self->chanData & 0xffff;
   Bit32u kslBase = KslTable[ data >> 6 ];
@@ -735,9 +735,9 @@ static void Channel__UpdateFrequency(Channel *self, const Chip* chip, Bit8u four
   }
 }
 
-static void Channel__WriteA0(Channel *self, const Chip* chip, Bit8u val ) {
+static void Channel__WriteA0(Channel *self, const Chip* chip, DOOM_bit8U val ) {
   Bit32u change;
-  Bit8u fourOp = chip->reg104 & chip->opl3Active & self->fourMask;
+  DOOM_bit8U fourOp = chip->reg104 & chip->opl3Active & self->fourMask;
   //Don't handle writes to silent fourop channels
   if ( fourOp > 0x80 )
     return;
@@ -748,9 +748,9 @@ static void Channel__WriteA0(Channel *self, const Chip* chip, Bit8u val ) {
   }
 }
 
-static void Channel__WriteB0(Channel *self, const Chip* chip, Bit8u val ) {
+static void Channel__WriteB0(Channel *self, const Chip* chip, DOOM_bit8U val ) {
   Bitu change;
-  Bit8u fourOp = chip->reg104 & chip->opl3Active & self->fourMask;
+  DOOM_bit8U fourOp = chip->reg104 & chip->opl3Active & self->fourMask;
   //Don't handle writes to silent fourop channels
   if ( fourOp > 0x80 )
     return;
@@ -780,9 +780,9 @@ static void Channel__WriteB0(Channel *self, const Chip* chip, Bit8u val ) {
   }
 }
 
-static void Channel__WriteC0(Channel *self, const Chip* chip, Bit8u val ) {
-  Bit8u synth;
-  Bit8u change = val ^ self->regC0;
+static void Channel__WriteC0(Channel *self, const Chip* chip, DOOM_bit8U val ) {
+  DOOM_bit8U synth;
+  DOOM_bit8U change = val ^ self->regC0;
   if ( !change )
     return;
   self->regC0 = val;
@@ -848,7 +848,7 @@ static void Channel__WriteC0(Channel *self, const Chip* chip, Bit8u val ) {
 }
 
 static void Channel__ResetC0(Channel *self, const Chip* chip ) {
-  Bit8u val = self->regC0;
+  DOOM_bit8U val = self->regC0;
   self->regC0 ^= 0xff;
   Channel__WriteC0( self, chip, val );
 };
@@ -1110,8 +1110,8 @@ static inline Bit32u Chip__ForwardLFO(Chip *self, Bit32u samples ) {
 }
 
 
-static void Chip__WriteBD(Chip *self, Bit8u val ) {
-  Bit8u change = self->regBD ^ val;
+static void Chip__WriteBD(Chip *self, DOOM_bit8U val ) {
+  DOOM_bit8U change = self->regBD ^ val;
   if ( !change )
     return;
   self->regBD = val;
@@ -1189,7 +1189,7 @@ static void Chip__WriteBD(Chip *self, Bit8u val ) {
                 Channel__ ## _FUNC_ (regChan, self, val); \
   }
 
-void Chip__WriteReg(Chip *self, Bit32u reg, Bit8u val ) {
+void Chip__WriteReg(Chip *self, Bit32u reg, DOOM_bit8U val ) {
   Bitu index;
   switch ( (reg & 0xf0) >> 4 ) {
   case 0x00 >> 4:
@@ -1254,7 +1254,7 @@ void Chip__WriteReg(Chip *self, Bit32u reg, Bit8u val ) {
   }
 }
 
-Bit32u Chip__WriteAddr(Chip *self, Bit32u port, Bit8u val ) {
+Bit32u Chip__WriteAddr(Chip *self, Bit32u port, DOOM_bit8U val ) {
   switch ( port & 3 ) {
   case 0:
     return val;
@@ -1336,16 +1336,16 @@ void Chip__Setup(Chip *self, Bit32u rate ) {
 
   //-3 since the real envelope takes 8 steps to reach the single value we supply
   for ( i = 0; i < 76; i++ ) {
-    Bit8u index, shift;
-    EnvelopeSelect( (Bit8u) i, &index, &shift );
+    DOOM_bit8U index, shift;
+    EnvelopeSelect( (DOOM_bit8U) i, &index, &shift );
     self->linearRates[i] = (Bit32u)( scale * (EnvelopeIncreaseTable[ index ] << ( RATE_SH + ENV_EXTRA - shift - 3 )));
   }
   //Generate the best matching attack rate
   for ( i = 0; i < 62; i++ ) {
-    Bit8u index, shift;
+    DOOM_bit8U index, shift;
     Bit32s original, guessAdd, bestAdd, bestDiff;
     Bit32u passes;
-    EnvelopeSelect( (Bit8u) i, &index, &shift );
+    EnvelopeSelect( (DOOM_bit8U) i, &index, &shift );
     //Original amount of samples the attack would take
     original = (Bit32u)( (AttackSamplesTable[ index ] << shift) / scale);
 
@@ -1455,7 +1455,7 @@ void DBOPL_InitTables( void ) {
   //Add 0.5 for the trunc rounding of the integer cast
   //Do a PI sinetable instead of the original 0.5 PI
   for ( i = 0; i < 512; i++ ) {
-    SinTable[i] = (Bit16s)( 0.5 - log10( sin( (i + 0.5) * (PI / 512.0) ) ) / log10(2.0)*256 );
+    SinTable[i] = (DOOM_bit16s)( 0.5 - log10( sin( (i + 0.5) * (PI / 512.0) ) ) / log10(2.0)*256 );
   }
 #endif
 #if ( DBOPL_WAVE == WAVE_TABLEMUL )
@@ -1464,30 +1464,30 @@ void DBOPL_InitTables( void ) {
     int s = i * 8;
     //TODO maybe keep some of the precision errors of the original table?
     double val = ( 0.5 + ( pow(2.0, -1.0 + ( 255 - s) * ( 1.0 /256 ) )) * ( 1 << MUL_SH ));
-    MulTable[i] = (Bit16u)(val);
+    MulTable[i] = (DOOM_bit16u)(val);
   }
 
   //Sine Wave Base
   for ( i = 0; i < 512; i++ ) {
-    WaveTable[ 0x0200 + i ] = (Bit16s)(sin( (i + 0.5) * (PI / 512.0) ) * 4084);
+    WaveTable[ 0x0200 + i ] = (DOOM_bit16s)(sin( (i + 0.5) * (PI / 512.0) ) * 4084);
     WaveTable[ 0x0000 + i ] = -WaveTable[ 0x200 + i ];
   }
   //Exponential wave
   for ( i = 0; i < 256; i++ ) {
-    WaveTable[ 0x700 + i ] = (Bit16s)( 0.5 + ( pow(2.0, -1.0 + ( 255 - i * 8) * ( 1.0 /256 ) ) ) * 4085 );
+    WaveTable[ 0x700 + i ] = (DOOM_bit16s)( 0.5 + ( pow(2.0, -1.0 + ( 255 - i * 8) * ( 1.0 /256 ) ) ) * 4085 );
     WaveTable[ 0x6ff - i ] = -WaveTable[ 0x700 + i ];
   }
 #endif
 #if ( DBOPL_WAVE == WAVE_TABLELOG )
   //Sine Wave Base
   for ( i = 0; i < 512; i++ ) {
-    WaveTable[ 0x0200 + i ] = (Bit16s)( 0.5 - log10( sin( (i + 0.5) * (PI / 512.0) ) ) / log10(2.0)*256 );
-    WaveTable[ 0x0000 + i ] = ((Bit16s)0x8000) | WaveTable[ 0x200 + i];
+    WaveTable[ 0x0200 + i ] = (DOOM_bit16s)( 0.5 - log10( sin( (i + 0.5) * (PI / 512.0) ) ) / log10(2.0)*256 );
+    WaveTable[ 0x0000 + i ] = ((DOOM_bit16s)0x8000) | WaveTable[ 0x200 + i];
   }
   //Exponential wave
   for ( i = 0; i < 256; i++ ) {
     WaveTable[ 0x700 + i ] = i * 8;
-    WaveTable[ 0x6ff - i ] = ((Bit16s)0x8000) | i * 8;
+    WaveTable[ 0x6ff - i ] = ((DOOM_bit16s)0x8000) | i * 8;
   }
 #endif
 
@@ -1526,7 +1526,7 @@ void DBOPL_InitTables( void ) {
   }
   //Create the Tremolo table, just increase and decrease a triangle wave
   for ( i = 0; i < TREMOLO_TABLE / 2; i++ ) {
-    Bit8u val = i << ENV_EXTRA;
+    DOOM_bit8U val = i << ENV_EXTRA;
     TremoloTable[i] = val;
     TremoloTable[TREMOLO_TABLE - 1 - i] = val;
   }
@@ -1546,7 +1546,7 @@ void DBOPL_InitTables( void ) {
     if ( i >= 16 )
       index += 9;
     blah = (Bitu) ( &(chip->chan[ index ]) );
-    ChanOffsetTable[i] = (Bit16u) blah;
+    ChanOffsetTable[i] = (DOOM_bit16u) blah;
   }
   //Same for operators
   for ( i = 0; i < 64; i++ ) {
@@ -1562,12 +1562,12 @@ void DBOPL_InitTables( void ) {
       chNum += 16 - 12;
     opNum = ( i % 8 ) / 3;
     blah = (Bitu) ( &(chan->op[opNum]) );
-    OpOffsetTable[i] = (Bit16u) (ChanOffsetTable[ chNum ] + blah);
+    OpOffsetTable[i] = (DOOM_bit16u) (ChanOffsetTable[ chNum ] + blah);
   }
 #if 0
   //Stupid checks if table's are correct
   for ( Bitu i = 0; i < 18; i++ ) {
-    Bit32u find = (Bit16u)( &(chip->chan[ i ]) );
+    Bit32u find = (DOOM_bit16u)( &(chip->chan[ i ]) );
     for ( Bitu c = 0; c < 32; c++ ) {
       if ( ChanOffsetTable[c] == find ) {
         find = 0;
@@ -1579,7 +1579,7 @@ void DBOPL_InitTables( void ) {
     }
   }
   for ( Bitu i = 0; i < 36; i++ ) {
-    Bit32u find = (Bit16u)( &(chip->chan[ i / 2 ].op[i % 2]) );
+    Bit32u find = (DOOM_bit16u)( &(chip->chan[ i / 2 ].op[i % 2]) );
     for ( Bitu c = 0; c < 64; c++ ) {
       if ( OpOffsetTable[c] == find ) {
         find = 0;

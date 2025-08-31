@@ -256,36 +256,31 @@ static void P_RunThinkers (void)
 // P_Ticker
 //
 
-void P_Ticker (void)
-{
-  int i;
+#include "net_snapshot.h"
+// --- Modify P_Ticker ---
+void P_Ticker(void) {
+    int i;
 
-  /* pause if in menu and at least one tic has been run
-   *
-   * killough 9/29/98: note that this ties in with basetic,
-   * since G_Ticker does the pausing during recording or
-   * playback, and compenates by incrementing basetic.
-   *
-   * All of this complicated mess is used to preserve demo sync.
-   */
+    if (paused || (menuactive && !demoplayback && !netgame &&
+        players[consoleplayer].viewz != 1))
+        return;
 
-  if (paused || (menuactive && !demoplayback && !netgame &&
-     players[consoleplayer].viewz != 1))
-    return;
+    R_UpdateInterpolations();
 
-  R_UpdateInterpolations ();
+    P_MapStart();
+    if (gamestate==GS_LEVEL)
+    for (i=0; i<MAXPLAYERS; i++)
+        if (playeringame[i])
+            P_PlayerThink(&players[i]);
 
-  P_MapStart();
-               // not if this is an intermission screen
-  if(gamestate==GS_LEVEL)
-  for (i=0; i<MAXPLAYERS; i++)
-    if (playeringame[i])
-      P_PlayerThink(&players[i]);
+    P_RunThinkers();
+    P_UpdateSpecials();
+    P_RespawnSpecials();
+    P_MapEnd();
+    leveltime++;
 
-  P_RunThinkers();
-  P_UpdateSpecials();
-  P_RespawnSpecials();
-  P_MapEnd();
-  leveltime++;                       // for par times
+    // Snapshot logic
+    if (netgame) {
+      NET_Snapshot_Tick();
+    }
 }
-

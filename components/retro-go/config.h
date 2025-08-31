@@ -24,6 +24,8 @@
 #include "targets/t-deck-plus/config.h"
 #elif defined(RG_TARGET_VMU)
 #include "targets/vmu/config.h"
+#elif defined(RG_TARGET_JAF1)
+#include "targets/jaf1/config.h"
 #elif defined(RG_TARGET_CROKPOCKET)
 #include "targets/crokpocket/config.h"
 #elif defined(RG_TARGET_ESP32_P4)

@@ -352,7 +352,7 @@ typedef struct mobj_s
     fixed_t             PrevZ;
 
     fixed_t             pad; // cph - needed so I can get the size unambiguously on amd64
-
+    int mobj_id;
     // SEE WARNING ABOVE ABOUT POINTER FIELDS!!!
 } mobj_t;
 

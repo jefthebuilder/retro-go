@@ -196,7 +196,7 @@ static INLINE void ASL8(void)
    SetZN8(Work8);
 }
 
-static INLINE void BIT16(void)
+static INLINE void SNES_bit16(void)
 {
    uint16_t Work16 = S9xGetWord(OpAddress);
    ICPU._Overflow = (Work16 & 0x4000) != 0;
@@ -204,7 +204,7 @@ static INLINE void BIT16(void)
    ICPU._Zero = (Work16 & ICPU.Registers.A.W) != 0;
 }
 
-static INLINE void BIT8(void)
+static INLINE void SNES_bit8(void)
 {
    uint8_t Work8 = S9xGetByte(OpAddress);
    ICPU._Overflow = (Work8 & 0x40) != 0;

@@ -296,7 +296,7 @@
 	mPC++;\
     PUSH(mPC>>8);\
 	PUSH(mPC&0xff);\
-	PUSH(PS()|0x10);\
+	PUSH(PS2()|0x10);\
 	mD=FALSE;\
 	mI=TRUE;\
 	mPC=CPU_PEEKW(IRQ_VECTOR);\
@@ -308,7 +308,7 @@
 	mPC++;\
     PUSH(mPC>>8);\
 	PUSH(mPC&0xff);\
-	PUSH(PS()|0x10);\
+	PUSH(PS2()|0x10);\
 \
 	mD=FALSE;\
 	mI=TRUE;\
@@ -573,7 +573,7 @@
 
 #define	xPHP()\
 {\
-	PUSH(PS());\
+	PUSH(PS2());\
 }
 
 #define	xPHX()\
@@ -596,7 +596,7 @@
 {\
 	int P;\
 	PULL(P);\
-	PS(P);\
+	PS2(P);\
 }
 
 #define	xPLX()\
@@ -655,7 +655,7 @@
 {\
 	int tmp;\
 	PULL(tmp);\
-	PS(tmp);\
+	PS2(tmp);\
 	PULL(mPC);\
 	PULL(tmp);\
 	mPC|=tmp<<8;\

@@ -10,6 +10,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdio.h>
 
+// #include "inject_host_storage.h"
 #include "config.h"
 
 #ifdef ESP_PLATFORM
@@ -23,7 +24,6 @@ extern "C" {
 #define IRAM_ATTR
 #define RTC_NOINIT_ATTR
 #endif
-
 #include "rg_localization.h"
 #include "rg_audio.h"
 #include "rg_display.h"

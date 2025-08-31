@@ -186,10 +186,17 @@ int I_GetTimeMS(void)
 {
     return rg_system_timer() / 1000;
 }
-
+int ms_to_next_tick;
 int I_GetTime(void)
 {
-    return I_GetTimeMS() * TICRATE * realtic_clock_rate / 100000;
+    int elapsed_ms = I_GetTimeMS();
+    const int tick_interval_ms = 1000 / 30; // ~16.666 ms per tick at 60 Hz
+
+    // Calculate time until next tick
+    ms_to_next_tick = tick_interval_ms - (elapsed_ms % tick_interval_ms);
+
+    // Return ticks adjusted by TICRATE and realtic_clock_rate
+    return (elapsed_ms * TICRATE * realtic_clock_rate) / 100000;
 }
 
 void I_uSleep(unsigned long usecs)
@@ -552,17 +559,29 @@ void app_main()
     const char *iwad = NULL;
     const char *pwad = NULL;
 
-    if (is_iwad(app->romPath))
-        iwad = app->romPath;
-    else
-        pwad = app->romPath;
 
-    if (!iwad)
-    {
-        iwad = rg_gui_file_picker("Select IWAD file", I_DoomExeDir(), is_iwad, false) ?: "";
-        rg_gui_draw_hourglass(); // Redraw hourglass to indicate loading...
+    char *rompath = strdup(app->romPath); // duplicate string to safely modify
+    char *extra_args = NULL;
+
+    // Split at the first '|'
+    char *sep = strchr(rompath, '|');
+    if (sep) {
+        *sep = '\0';               // terminate the first part
+        extra_args = sep + 1;      // pointer to the extra arguments
     }
 
+    // Now rompath contains the actual ROM path
+    if (is_iwad(rompath))
+        iwad = rompath;
+    else
+        pwad = rompath;
+
+    // Optionally handle extra_args somewhere
+    if (extra_args) {
+        printf("Extra args: %s\n", extra_args); // or add to argv
+    }
+
+    // Then continue setting up doom_argv
     myargv = doom_argv;
     myargc = pwad ? 7 : 5;
     doom_argv[0] = "doom";
@@ -570,8 +589,21 @@ void app_main()
     doom_argv[2] = RG_BASE_PATH_SAVES "/doom";
     doom_argv[3] = "-iwad";
     doom_argv[4] = iwad;
+
+
     doom_argv[5] = "-file";
     doom_argv[6] = pwad;
+
+
+    // If you want to append extra_args to doom_argv, split by spaces and add each
+    if (extra_args) {
+        char *arg = strtok(extra_args, " ");
+        while (arg) {
+            doom_argv[myargc++] = arg;
+            arg = strtok(NULL, " ");
+        }
+    }
+
     doom_argv[myargc] = 0;
 
 #ifdef ESP_PLATFORM

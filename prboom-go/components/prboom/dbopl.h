@@ -45,10 +45,10 @@ typedef uintptr_t       Bitu;
 typedef intptr_t        Bits;
 typedef uint32_t        Bit32u;
 typedef int32_t         Bit32s;
-typedef uint16_t        Bit16u;
-typedef int16_t         Bit16s;
-typedef uint8_t         Bit8u;
-typedef int8_t          Bit8s;
+typedef uint16_t        DOOM_bit16u;
+typedef int16_t         DOOM_bit16s;
+typedef uint8_t         DOOM_bit8U;
+typedef int8_t          SNES_bit8s;
 
 #if (DBOPL_WAVE == WAVE_HANDLER)
 typedef Bits ( DB_FASTCALL *WaveHandler) ( Bitu i, Bitu volume );
@@ -103,7 +103,7 @@ struct _Operator {
 #if (DBOPL_WAVE == WAVE_HANDLER)
   WaveHandler waveHandler;  //Routine that generate a wave
 #else
-  Bit16s* waveBase;
+  DOOM_bit16s* waveBase;
   Bit32u waveMask;
   Bit32u waveStart;
 #endif
@@ -124,18 +124,18 @@ struct _Operator {
   Bit32u releaseAdd;
   Bit32u rateIndex;     //Current position of the evenlope
 
-  Bit8u rateZero;       //Bits for the different states of the envelope having no changes
-  Bit8u keyOn;        //Bitmask of different values that can generate keyon
+  DOOM_bit8U rateZero;       //Bits for the different states of the envelope having no changes
+  DOOM_bit8U keyOn;        //Bitmask of different values that can generate keyon
   //Registers, also used to check for changes
-  Bit8u reg20, reg40, reg60, reg80, regE0;
+  DOOM_bit8U reg20, reg40, reg60, reg80, regE0;
   //Active part of the envelope we're in
-  Bit8u state;
+  DOOM_bit8U state;
   //0xff when tremolo is enabled
-  Bit8u tremoloMask;
+  DOOM_bit8U tremoloMask;
   //Strength of the vibrato
-  Bit8u vibStrength;
+  DOOM_bit8U vibStrength;
   //Keep track of the calculated KSR so we can check for changes
-  Bit8u ksr;
+  DOOM_bit8U ksr;
 };
 
 struct _Channel {
@@ -144,13 +144,13 @@ struct _Channel {
   Bit32u chanData;    //Frequency/octave and derived values
   Bit32s old[2];      //Old data for feedback
 
-  Bit8u feedback;     //Feedback shift
-  Bit8u regB0;      //Register values to check for changes
-  Bit8u regC0;
+  DOOM_bit8U feedback;     //Feedback shift
+  DOOM_bit8U regB0;      //Register values to check for changes
+  DOOM_bit8U regC0;
   //This should correspond with reg104, bit 6 indicates a Percussion channel, bit 7 indicates a silent channel
-  Bit8u fourMask;
-  Bit8s maskLeft;   //Sign extended values for both channel's panning
-  Bit8s maskRight;
+  DOOM_bit8U fourMask;
+  SNES_bit8s maskLeft;   //Sign extended values for both channel's panning
+  SNES_bit8s maskRight;
 
 };
 
@@ -174,29 +174,29 @@ struct _Chip {
   //18 channels with 2 operators each
   Channel chan[18];
 
-  Bit8u reg104;
-  Bit8u reg08;
-  Bit8u reg04;
-  Bit8u regBD;
-  Bit8u vibratoIndex;
-  Bit8u tremoloIndex;
-  Bit8s vibratoSign;
-  Bit8u vibratoShift;
-  Bit8u tremoloValue;
-  Bit8u vibratoStrength;
-  Bit8u tremoloStrength;
+  DOOM_bit8U reg104;
+  DOOM_bit8U reg08;
+  DOOM_bit8U reg04;
+  DOOM_bit8U regBD;
+  DOOM_bit8U vibratoIndex;
+  DOOM_bit8U tremoloIndex;
+  SNES_bit8s vibratoSign;
+  DOOM_bit8U vibratoShift;
+  DOOM_bit8U tremoloValue;
+  DOOM_bit8U vibratoStrength;
+  DOOM_bit8U tremoloStrength;
   //Mask for allowed wave forms
-  Bit8u waveFormMask;
+  DOOM_bit8U waveFormMask;
   //0 or -1 when enabled
-  Bit8s opl3Active;
+  SNES_bit8s opl3Active;
 
 };
 
 /*
 struct Handler : public Adlib::Handler {
   DBOPL::Chip chip;
-  virtual Bit32u WriteAddr( Bit32u port, Bit8u val );
-  virtual void WriteReg( Bit32u addr, Bit8u val );
+  virtual Bit32u WriteAddr( Bit32u port, DOOM_bit8U val );
+  virtual void WriteReg( Bit32u addr, DOOM_bit8U val );
   virtual void Generate( MixerChannel* chan, Bitu samples );
   virtual void Init( Bitu rate );
 };
@@ -206,13 +206,13 @@ struct Handler : public Adlib::Handler {
 extern "C" void Chip__Setup(Chip *self, Bit32u rate );
 extern "C" void DBOPL_InitTables( void );
 extern "C" void Chip__Chip(Chip *self);
-extern "C" void Chip__WriteReg(Chip *self, Bit32u reg, Bit8u val );
+extern "C" void Chip__WriteReg(Chip *self, Bit32u reg, DOOM_bit8U val );
 extern "C" void Chip__GenerateBlock2(Chip *self, Bitu total, Bit32s* output );
 #else
 void Chip__Setup(Chip *self, Bit32u rate );
 void DBOPL_InitTables( void );
 void Chip__Chip(Chip *self);
-void Chip__WriteReg(Chip *self, Bit32u reg, Bit8u val );
+void Chip__WriteReg(Chip *self, Bit32u reg, DOOM_bit8U val );
 void Chip__GenerateBlock2(Chip *self, Bitu total, Bit32s* output );
 
 #endif

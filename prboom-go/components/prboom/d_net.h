@@ -55,6 +55,18 @@
 
 // Max computers/players in a game.
 #define MAXNETNODES             8
+typedef struct {
+    int32_t x;
+    int32_t y;
+    int32_t z;
+    unsigned angle;
+    int16_t velocityx;
+    int16_t velocityy;
+    uint8_t player_id;
+    int health;
+    playerstate_t       state;
+
+} PACKEDATTR pkt_syncposition_payload_t;
 
 
 typedef enum
@@ -188,11 +200,8 @@ typedef struct
 } doomcom_t;
 
 // Create any new ticcmds and broadcast to other players.
-#ifdef HAVE_NET
 void NetUpdate (void);
-#else
 void D_BuildNewTiccmds(void);
-#endif
 
 //? how many ticks to run?
 void TryRunTics (void);

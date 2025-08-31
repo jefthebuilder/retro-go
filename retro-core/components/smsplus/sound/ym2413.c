@@ -1099,11 +1099,11 @@ MAME_INLINE void rhythm_calc( YM2413_OPLL_CH *CH, unsigned int noise )
   if( env < ENV_QUIET )
   {
     /* base frequency derived from operator 1 in channel 7 */
-    unsigned char bit8 = ((SLOT7_1->phase>>FREQ_SH)>>8)&1;
+    unsigned char SNES_bit8 = ((SLOT7_1->phase>>FREQ_SH)>>8)&1;
 
-    /* when bit8 = 0 phase = 0x100; */
-    /* when bit8 = 1 phase = 0x200; */
-    UINT32 phase = bit8 ? 0x200 : 0x100;
+    /* when SNES_bit8 = 0 phase = 0x100; */
+    /* when SNES_bit8 = 1 phase = 0x200; */
+    UINT32 phase = SNES_bit8 ? 0x200 : 0x100;
 
     /* Noise bit XOR'es phase by 0x100 */
     /* when noisebit = 0 pass the phase from calculation above */

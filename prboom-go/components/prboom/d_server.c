@@ -53,9 +53,15 @@
 #ifdef USE_SDL_NET
  #include "SDL.h"
 #endif
+/* new packet type for authoritative correction */
+#ifndef PKT_CORRECT
+#define PKT_CORRECT 0xFE
+#endif
+
+/* how often to send corrections (tics). Adjust as needed. */
+#define CORRECT_INTERVAL 10
 
 #include "doomtype.h"
-#include "protocol.h"
 #include "i_network.h"
 #ifndef PRBOOM_SERVER
 #include "m_fixed.h"
@@ -685,6 +691,49 @@ int main(int argc, char** argv)
   if (lowtic > exectics)
     exectics = lowtic; // count exec'ed tics
   // Now send all tics up to lowtic
+  /* Send periodic correction packet to each playing client */
+if ((exectics % CORRECT_INTERVAL) == 0) {
+  int p;
+  for (p = 0; p < MAXPLAYERS; ++p) {
+    if (playerstate[p] != pc_playing) continue;
+    if (!players[p].mo) continue; /* safety */
+
+    /* build correction packet:
+     * packet layout:
+     *   packet_header_t
+     *   byte   playernum
+     *   int32  x (fixed_t)
+     *   int32  y (fixed_t)
+     *   int32  z (fixed_t)
+     *   int32  angle (angle_t)
+     *   int32  health (int)
+     */
+    size_t pkt_size = sizeof(packet_header_t) + 1 + 5 * sizeof(int);
+    packet_header_t *pkt = malloc(pkt_size);
+    if (!pkt) continue;
+    packet_set(pkt, PKT_CORRECT, exectics);
+
+    int *pw = (int*)(pkt + 1);
+    byte *pb = (byte*)(pkt + 1);
+    pb[0] = (byte)p; /* player number */
+
+    /* advance pointer past player byte */
+    pw = (int*)(pb + 1);
+
+    /* use LONG() macro (used elsewhere in code) to network-order ints */
+    *pw++ = LONG(players[p].mo->x);      /* fixed_t x */
+    *pw++ = LONG(players[p].mo->y);      /* fixed_t y */
+    *pw++ = LONG(players[p].mo->z);      /* fixed_t z */
+    *pw++ = LONG(players[p].mo->angle);  /* angle_t (store as int) */
+    *pw++ = LONG(players[p].health);     /* health as int */
+
+    /* send to the corresponding client address */
+    I_SendPacketTo(pkt, pkt_size, &remoteaddr[p]);
+
+    free(pkt);
+  }
+}
+
   for (i=0; i<MAXPLAYERS; i++)
     if (playerstate[i] == pc_playing) {
       int tics;
@@ -732,7 +781,7 @@ int main(int argc, char** argv)
       }
     }
   }
-      if (!((ingame ? 0xff : 0xf) & displaycounter++)) { 
+      if (!((ingame ? 0xff : 0xf) & displaycounter++)) {
         int i;
         fprintf(stderr,"Player states: [");
         for (i=0;i<MAXPLAYERS;i++) {

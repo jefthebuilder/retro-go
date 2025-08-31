@@ -1533,7 +1533,7 @@ XXX conflicting info suggests these frequency values:
   (XXX but, this won't match the "/2/(N+1)" part of the above formula)
 The random number generator consists of a 15bit shift register. The MSB (Bit14)
 is output/inverted (1=Low/Zero, 0=High/Decay/Volume). At the specified
-frequency, Bit14 is XORed with Bit13 (32767-bit mode) or with Bit8 (93-bit
+frequency, Bit14 is XORed with Bit13 (32767-bit mode) or with SNES_bit8 (93-bit
 mode), the register is then shifted to the left, with the result of the XOR
 operation shifted-in to Bit0.
 
@@ -3344,7 +3344,7 @@ The Index/Data Pairs are:
   Unknown if/how/where RPM is transferred.
   Speed (MPH) also affects distance (DST).
 The 4bit flag-field for the Pulse data is:
-  Bit8  Blink Heart-Symbol
+  SNES_bit8  Blink Heart-Symbol
   Bit9  Show "E"
   Bit10 Show "LO"  ;\when both set: treated as "sensor not connected"
   Bit11 Show "HI"  ;/(ie. showing "--" instead of the pulse value)
@@ -3712,7 +3712,7 @@ Some very strange ones:
   1D18           ;   ...  ??       ; might be somehow related to near & far
   0000           ;   ...  ??       ;/transformed to slow/pulsed & fast/normal
   (Maybe flex on 3 fingers, with two 2x2bit flex pairs in LSBs if first word,
-  plus bit8=whatever, plus an extra 2x2bit flex pair somewhere in 2nd word?)
+  plus SNES_bit8=whatever, plus an extra 2x2bit flex pair somewhere in 2nd word?)
 Some other odd ones:
   440C           ;\maybe "true if ring is NEWLY bent"?
   440C           ;/
@@ -12253,7 +12253,7 @@ Proper cart selection requires setting up BOTH the desired cart number
 err... what is this register having to do with "CATV"...? maybe the relay?
 
 5007h.R - Misc Status
-  0    TV type selection (0=TV, 1=Game)   ;or... trap flag bit8... CIC, 1=trap?
+  0    TV type selection (0=TV, 1=Game)   ;or... trap flag SNES_bit8... CIC, 1=trap?
   1    Keyswitch turned  (0=No, 1=in middle of two positions)
   2    Zapper GND (0=Enabled or Disabled+Disconnected, 1=Disabled+Connected)
   3    Expansion 50-pin Edge Connector, Pin 21 (inverted)

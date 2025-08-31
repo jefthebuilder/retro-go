@@ -702,10 +702,8 @@ void G_Ticker (void)
   // CPhipps - player colour changing
   if (!demoplayback && mapcolor_plyr[consoleplayer] != mapcolor_me) {
     // Changed my multiplayer colour - Inform the whole game
-#ifdef HAVE_NET
     int net_cl = LONG(mapcolor_me);
     D_NetSendMisc(nm_plcolour, sizeof(net_cl), &net_cl);
-#endif
     G_ChangedPlayerColour(consoleplayer, mapcolor_me);
   }
   P_MapStart();
@@ -783,10 +781,10 @@ void G_Ticker (void)
 
           if (netgame && !netdemo && !(gametic%ticdup) )
             {
-              if (gametic > BACKUPTICS
-                  && consistancy[i][buf] != cmd->consistancy)
-                I_Error("G_Ticker: Consistency failure (%i should be %i)",
-            cmd->consistancy, consistancy[i][buf]);
+              //if (gametic > BACKUPTICS
+                //  && consistancy[i][buf] != cmd->consistancy)
+                //I_Error("G_Ticker: Consistency failure (%i should be %i)",
+                //cmd->consistancy, consistancy[i][buf]);
               if (players[i].mo)
                 consistancy[i][buf] = players[i].mo->x;
               else
@@ -1649,9 +1647,7 @@ void G_SaveGame(int slot, char *description)
   // CPhipps - store info in special_event
   special_event = BT_SPECIAL | (BTS_SAVEGAME & BT_SPECIALMASK) |
     ((slot << BTS_SAVESHIFT) & BTS_SAVEMASK);
-#ifdef HAVE_NET
   D_NetSendMisc(nm_savegamename, strlen(savedescription)+1, savedescription);
-#endif
 }
 
 // Check for overrun and realloc if necessary -- Lee Killough 1/22/98
