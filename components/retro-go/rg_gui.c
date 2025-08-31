@@ -1550,7 +1550,8 @@ static rg_gui_event_t overclock_cb(rg_gui_option_t *option, rg_gui_event_t event
         rg_system_set_overclock(rg_system_get_overclock() - 1);
     else if (event == RG_DIALOG_NEXT)
         rg_system_set_overclock(rg_system_get_overclock() + 1);
-    sprintf(option->value, "%dMhz", 240 + rg_system_get_overclock() * 20);
+    if (event == RG_DIALOG_INIT || event == RG_DIALOG_PREV || event == RG_DIALOG_NEXT)
+        sprintf(option->value, "%d (%dMhz)", rg_system_get_overclock(), rg_system_get_cpu_speed());
     return RG_DIALOG_VOID;
 }
 
@@ -2011,8 +2012,8 @@ void rg_gui_options_menu(void)
         {0, _("Border"),        "-", RG_DIALOG_FLAG_NORMAL, &border_update_cb},
         {0, _("Speed"),         "-", RG_DIALOG_FLAG_NORMAL, &speedup_update_cb},
         // {0, _("Misc options"),  NULL, RG_DIALOG_FLAG_NORMAL, &misc_options_cb},
-        #if !RG_BUILD_RELEASE
-        {0, _("Overclock"),        "-", RG_DIALOG_FLAG_NORMAL, &overclock_cb},
+        #if !RG_BUILD_RELEASE /* Add overclock here for easier testing during dev */
+        {0, _("Overclock"),     "-", RG_DIALOG_FLAG_NORMAL, &overclock_cb},
         #endif
         {0, _("Emulator options"), NULL, RG_DIALOG_FLAG_NORMAL, &app_options_cb},
         RG_DIALOG_END,
@@ -2105,14 +2106,14 @@ void rg_gui_debug_menu(void)
         {0, "Battery   ", battery_info, RG_DIALOG_FLAG_NORMAL, NULL},
         {0, "Blit time ", frame_time,   RG_DIALOG_FLAG_NORMAL, NULL},
         RG_DIALOG_SEPARATOR,
-        {0, "Overclock", NULL, RG_DIALOG_FLAG_NORMAL, &overclock_cb},
-        {1, "Reboot to firmware", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
-        {2, "Clear cache    ", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
-        {3, "Save screenshot", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
-        {4, "Save trace", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
-        {5, "Cheats    ", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
-        {6, "Crash     ", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
-        {7, "Log=debug ", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {0, "Overclock",            "-", RG_DIALOG_FLAG_NORMAL, &overclock_cb},
+        {1, "Reboot to firmware",   NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {2, "Clear cache    ",      NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {3, "Save screenshot",      NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {4, "Save trace",           NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {5, "Cheats    ",           NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {6, "Crash     ",           NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {7, "Log=debug ",           NULL, RG_DIALOG_FLAG_NORMAL, NULL},
         RG_DIALOG_END
     };
 

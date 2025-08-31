@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include "streams/file_stream.h"
+#include "bios/open_gba_bios.h"
 
 /* Sound */
 #define gbc_sound_tone_control_low(channel, regn)                             \
@@ -336,9 +337,10 @@ const u32 def_seq_cycles[16][2] =
   { 9, 17 }, // Gamepak (wait 2)
 };
 
-#ifndef RETRO_GO
-u8 bios_rom[1024 * 16];
+static u8 *bios_rom_alloc; // [1024 * 16];
+const u8 *bios_rom = open_gba_bios_rom; // [1024 * 16];
 
+#ifndef RETRO_GO
 // Up to 128kb, store SRAM, flash ROM, or EEPROM here.
 u8 gamepak_backup[1024 * 128];
 #endif
@@ -665,7 +667,7 @@ u32 function_cc read_eeprom(void)
                                                                               \
     case 0x03:                                                                \
       /* internal work RAM */                                                 \
-      value = readaddress##type(iwram, (address & 0x7FFF) + 0x8000);          \
+      value = readaddress##type(iwram, (address & 0x7FFF) + (0x8000 * SMC_DETECTION));\
       break;                                                                  \
                                                                               \
     case 0x04:                                                                \
@@ -1418,7 +1420,7 @@ void function_cc write_gpio(u32 address, u32 value) {
                                                                               \
     case 0x03:                                                                \
       /* internal work RAM */                                                 \
-      address##type(iwram, (address & 0x7FFF) + 0x8000) = eswap##type(value); \
+      address##type(iwram, (address & 0x7FFF) + (0x8000 * SMC_DETECTION)) = eswap##type(value); \
       break;                                                                  \
                                                                               \
     case 0x04:                                                                \
@@ -1730,7 +1732,7 @@ const dma_region_type dma_region_map[17] =
   }                                                                           \
 
 #define dma_read_iwram(type, tfsize)                                          \
-  read_value = readaddress##tfsize(iwram + 0x8000, type##_ptr & 0x7FFF)       \
+  read_value = readaddress##tfsize(iwram + (0x8000 * SMC_DETECTION), type##_ptr & 0x7FFF) \
 
 #define dma_read_vram(type, tfsize) {                                         \
   u32 rdaddr = type##_ptr & 0x1FFFF;                                          \
@@ -1763,9 +1765,9 @@ const dma_region_type dma_region_map[17] =
   read_value = read_memory##tfsize(type##_ptr)                                \
 
 #define dma_write_iwram(type, tfsize)                                         \
-  address##tfsize(iwram + 0x8000, type##_ptr & 0x7FFF) =                      \
+  address##tfsize(iwram + (0x8000 * SMC_DETECTION), type##_ptr & 0x7FFF) =    \
                                           eswap##tfsize(read_value);          \
-  if (address##tfsize(iwram, type##_ptr & 0x7FFF))                            \
+  if (SMC_DETECTION && address##tfsize(iwram, type##_ptr & 0x7FFF))           \
     alerts |= CPU_ALERT_SMC;                                                  \
 
 #define dma_write_vram(type, tfsize) {                                        \
@@ -1788,7 +1790,7 @@ const dma_region_type dma_region_map[17] =
 
 #define dma_write_ewram(type, tfsize)                                         \
   address##tfsize(ewram, type##_ptr & 0x3FFFF) = eswap##tfsize(read_value);   \
-  if (address##tfsize(ewram, (type##_ptr & 0x3FFFF) + 0x40000))               \
+  if (SMC_DETECTION && address##tfsize(ewram, (type##_ptr & 0x3FFFF) + 0x40000)) \
     alerts |= CPU_ALERT_SMC;                                                  \
 
 #define print_line()                                                          \
@@ -2261,7 +2263,7 @@ void init_memory(void)
   map_region(read, 0x0000000, 0x1000000, 1, bios_rom);
   map_null(read, 0x1000000, 0x2000000);
   map_region(read, 0x2000000, 0x3000000, 8, ewram);
-  map_region(read, 0x3000000, 0x4000000, 1, &iwram[0x8000]);
+  map_region(read, 0x3000000, 0x4000000, 1, &iwram[0x8000 * SMC_DETECTION]);
   map_region(read, 0x4000000, 0x5000000, 1, io_registers);
   map_null(read, 0x5000000, 0x6000000);
   map_null(read, 0x6000000, 0x7000000);
@@ -2381,7 +2383,7 @@ bool memory_read_savestate(const u8 *src)
     return false;
 
   if (!(
-    bson_read_bytes(memdoc, "iwram", &iwram[0x8000], 0x8000) &&
+    bson_read_bytes(memdoc, "iwram", &iwram[0x8000 * SMC_DETECTION], 0x8000) &&
     bson_read_bytes(memdoc, "ewram", ewram, 0x40000) &&
     bson_read_bytes(memdoc, "vram", vram, sizeof(vram)) &&
     bson_read_bytes(memdoc, "oamram", oam_ram, sizeof(oam_ram)) &&
@@ -2443,7 +2445,7 @@ unsigned memory_write_savestate(u8 *dst)
   u32 rtc_data_array[2] = { (u32)rtc_data, (u32)(rtc_data >> 32) };
 
   bson_start_document(dst, "memory", wbptr);
-  bson_write_bytes(dst, "iwram", &iwram[0x8000], 0x8000);
+  bson_write_bytes(dst, "iwram", &iwram[0x8000 * SMC_DETECTION], 0x8000);
   bson_write_bytes(dst, "ewram", ewram, 0x40000);
   bson_write_bytes(dst, "vram", vram, sizeof(vram));
   bson_write_bytes(dst, "oamram", oam_ram, sizeof(oam_ram));
@@ -2578,13 +2580,21 @@ u32 load_gamepak(const struct retro_game_info* info, const char *name,
 s32 load_bios(char *name)
 {
   FILE *fd = fopen(name, "rb");
-
-  if(!fd)
+  if (!fd)
     return -1;
 
-  fread(bios_rom, 0x4000, 1, fd);
+  if (!bios_rom_alloc)
+    bios_rom_alloc = malloc(0x4000);
+
+  if (bios_rom_alloc && fread(bios_rom_alloc, 0x4000, 1, fd))
+  {
+    bios_rom = bios_rom_alloc;
+    fclose(fd);
+    return 0;
+  }
+fail:
   fclose(fd);
-  return 0;
+  return -1;
 }
 
 
