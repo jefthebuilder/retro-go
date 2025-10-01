@@ -218,7 +218,7 @@ void rg_storage_init(void)
         RG_LOGE("Storage mounting failed! err=0x%x", error_code);
     #ifdef RG_USB_MSC
         if (disk_mounted)
-            link_usb_msc(card_handle);  // link USB MSC to the card
+           link_usb_msc(card_handle);  // link USB MSC to the card
     #endif
 }
 

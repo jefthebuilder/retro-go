@@ -81,27 +81,19 @@ static void send_control_json(const char *json)
 
 #define PORT 5005
 #define MAX_FRAME_SIZE (320*240*2+8)  // adjust based on max expected size
-int recv_all(int sock, void *buf, int len) {
-    int total = 0;
-    char *p = buf;
-    while (total < len) {
-        int to_read = len - total;
-        if (to_read > 8192) to_read = 8192; // limit per recv
-        int r = recv(sock, p + total, to_read, 0);
-        if (r <= 0) return r;
-        total += r;
-    }
-    return total;
-}
-void tcp_image_server_task(void *pvParameters) {
-    int listen_sock, client_sock;
+static void udp_image_server_task(void *pvParameters) {
+    int sock;
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
 
-    static uint8_t frame_buf[MAX_FRAME_SIZE];  // persistent buffer
+    static uint8_t frame_buf[MAX_FRAME_SIZE];
+    static uint8_t reassembly_buf[MAX_FRAME_SIZE];
+    int expected_chunks = 0;
+    int received_chunks = 0;
+    int frame_size = 0;
 
-    listen_sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (listen_sock < 0) {
+    sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0) {
         printf("Socket creation failed\n");
         vTaskDelete(NULL);
     }
@@ -110,41 +102,57 @@ void tcp_image_server_task(void *pvParameters) {
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(PORT);
 
-    bind(listen_sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
-    listen(listen_sock, 1);
+    if (bind(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        printf("Bind failed\n");
+        close(sock);
+        vTaskDelete(NULL);
+    }
 
-    printf("TCP server listening on port %d\n", PORT);
+    printf("UDP server listening on port %d\n", PORT);
 
     while (1) {
-        client_sock = accept(listen_sock, (struct sockaddr *)&client_addr, &client_addr_len);
-        if (client_sock < 0) continue;
-        printf("Client connected\n");
-        int recv_buf_size = 64 * 1024; // 64 KB, adjust based on RAM
-        setsockopt(client_sock, SOL_SOCKET, SO_RCVBUF, &recv_buf_size, sizeof(recv_buf_size));
-        int flag = 1;
-        setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
-        while (1) {
-            uint32_t buf_size;
-            int received = recv_all(client_sock, &buf_size, sizeof(buf_size));
-            if (received <= 0) break;
-            buf_size = ntohl(buf_size);
-            RG_LOGI("%i",buf_size);
-            if (buf_size > MAX_FRAME_SIZE) break;
+        uint8_t packet[1500];
+        int len = recvfrom(sock, packet, sizeof(packet), 0,
+                           (struct sockaddr *)&client_addr, &client_addr_len);
+        if (len < 0) continue;
 
-            if (recv_all(client_sock, frame_buf, buf_size) < 0) break;
+        // First 2 bytes = chunk index
+        if (len < 2) continue;
+        uint16_t chunk_idx = (packet[0] << 8) | packet[1];
+        const uint8_t *payload = packet + 2;
+        int payload_len = len - 2;
 
-            void *new_surface = rg_surface_load_image(frame_buf, buf_size, 0);
-            if (new_surface) {
-
-                rg_display_submit(new_surface, 0);
-                rg_surface_free(new_surface);
-            } else {
-                printf("Image decode failed (size %u)\n", buf_size);
-            }
+        // Store in reassembly buffer
+        int offset = chunk_idx * 1398; // CHUNK_SIZE - header (1400-2)
+        if (offset + payload_len <= MAX_FRAME_SIZE) {
+            memcpy(reassembly_buf + offset, payload, payload_len);
         }
 
-        printf("Client disconnected\n");
-        close(client_sock);
+        // (Optional) track received_chunks vs expected
+        // For simplicity, assume new frame starts with chunk_idx==0
+        if (chunk_idx == 0) {
+            received_chunks = 0;
+            expected_chunks = 0; // unknown until we detect frame end
+        }
+
+        received_chunks++;
+
+        // Heuristic: if packet smaller than full payload, assume end of frame
+        if (payload_len < 1398) {
+            frame_size = offset + payload_len;
+
+            // Frame is complete → decode
+            const uint16_t *data16 = (const uint16_t *)reassembly_buf;
+            uint16_t w = data16[0];
+            uint16_t h = data16[1];
+            rg_surface_t new_surface = {
+                .width = w,
+                .height = h,
+                .stride = w * 2,
+                .format = RG_PIXEL_565_LE,
+                .data = (void *)(data16 + 2),   // <-- skip header correctly
+            };
+        }
     }
 }
 void cast_main(void)
@@ -166,7 +174,7 @@ void cast_main(void)
     RG_LOGI("connected to wifi");
 
 
-    xTaskCreate(tcp_image_server_task, "video_task", 16*1024, NULL, 5, NULL);
+    xTaskCreate(udp_image_server_task, "video_task", 16*1024, NULL, 5, NULL);
 
     // open control socket
     sock_control = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);

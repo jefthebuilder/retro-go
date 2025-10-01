@@ -4,6 +4,7 @@
  * They can't be allowed to access the partition at the same time.
  * For different scenarios and behaviour, Refer to README of this example.
  */
+
 #include "rg_system.h"
 
 #include <errno.h>
@@ -14,6 +15,8 @@
 #include "rg_msc.h"
 /* TinyUSB descriptors
    ********************************************************************* */
+
+
 #define EPNUM_MSC       1
 #define TUSB_DESC_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_MSC_DESC_LEN)
 
@@ -62,7 +65,6 @@ static char const *string_desc_arr[] = {
     "123456",                       // 3: Serials
     "Example MSC",                  // 4. MSC
 };
-/*********************************************************************** TinyUSB descriptors*/
 
 #define BASE_PATH "/" // base path to mount the partition
 
@@ -125,15 +127,14 @@ int link_usb_msc(sdmmc_card_t *card)
 
     const tinyusb_msc_sdmmc_config_t config_sdmmc = {
         .card = card,
-        .callback_mount_changed = storage_mount_changed_cb,  /* First way to register the callback. This is while initializing the storage. */
-        .mount_config.max_files = 5,
+        .callback_mount_changed = storage_mount_changed_cb,
     };
     esp_err_t err = tinyusb_msc_storage_init_sdmmc(&config_sdmmc);
     if(err != ESP_OK) {
         RG_LOGE("Failed to initialize storage: %d", err);
         return -1;
     }
-    err = tinyusb_msc_register_callback(TINYUSB_MSC_EVENT_MOUNT_CHANGED, storage_mount_changed_cb); /* Other way to register the callback i.e. registering using separate API. If the callback had been already registered, it will be overwritten. */
+    err = tinyusb_msc_register_callback(TINYUSB_MSC_EVENT_MOUNT_CHANGED, storage_mount_changed_cb);
     if(err != ESP_OK) {
         RG_LOGE("Failed to register callback: %d", err);
         return -1;
