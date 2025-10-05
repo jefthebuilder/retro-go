@@ -266,7 +266,7 @@ char* askMultiplayerInfo() {
         char response[512];
 
         esp_http_client_config_t config = {
-            .url = "http://192.168.1.196:5013/create_game",
+            .url = "http://185.70.45.28:5013/create_game",
             .method = HTTP_METHOD_POST,
             .user_data =response,
             .event_handler = multiplayer_server_event_get_handler
@@ -288,7 +288,7 @@ char* askMultiplayerInfo() {
             return NULL;
         }
 
-        const char *buffer = &response;
+        const char *buffer = response;
         if (buffer) {
             RG_LOGI("Server response: %s", buffer);
 
@@ -319,10 +319,10 @@ static void application_start(retro_file_t *file, int load_state) {
     RG_LOGE(name);
     // Append connection string if the name is "doom multiplayer"
     if (strcmp(name, "doom Multiplaye") == 0) {
-        size_t new_len = strlen(path) + strlen("| -net 192.168.1.196:1024") + 1;
+        size_t new_len = strlen(path) + strlen("| -net 185.70.45.28:1024") + 1;
         char *new_path = (char *)malloc(new_len);
         if (new_path) {
-            snprintf(new_path, new_len, "%s| -net 192.168.1.196:%s", path,askMultiplayerInfo());
+            snprintf(new_path, new_len, "%s| -net 185.70.45.28:%s", path,askMultiplayerInfo());
             free(path);
             path = new_path;
         }
