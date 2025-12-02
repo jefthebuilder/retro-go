@@ -127,7 +127,7 @@ void D_InitNetGame (void)
         }
         if (rg_network_get_info().state != RG_NETWORK_CONNECTED)
         {
-            RG_LOGI(stderr, "Warning: WiFi not connected, proceeding anyway.\n");
+            RG_LOGI("Warning: WiFi not connected, proceeding anyway.\n");
         }
     }
     RG_LOGI("connected to wifi");

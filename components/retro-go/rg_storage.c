@@ -36,9 +36,7 @@
 #endif
 #include "config.h"
 
-#ifdef RG_USB_MSC
 #include "libs/usb/rg_msc.h"
-#endif
 
 static bool disk_mounted = false;
 #if defined(RG_STORAGE_SDSPI_HOST) || defined(RG_STORAGE_SDMMC_HOST)
@@ -212,14 +210,14 @@ void rg_storage_init(void)
 
     disk_mounted = !error_code;
 
-    if (disk_mounted)
+    if (disk_mounted){
+        link_usb_msc(card_handle);  // link USB MSC to the card
         RG_LOGI("Storage mounted at %s.", RG_STORAGE_ROOT);
+
+    }
     else
         RG_LOGE("Storage mounting failed! err=0x%x", error_code);
-    #ifdef RG_USB_MSC
-        if (disk_mounted)
-           link_usb_msc(card_handle);  // link USB MSC to the card
-    #endif
+    
 }
 
 void rg_storage_deinit(void)

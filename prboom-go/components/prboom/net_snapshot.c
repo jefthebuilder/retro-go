@@ -103,7 +103,7 @@ static size_t build_snapshot(byte **out_buf) {
   byte *buf = Z_Malloc(sz, PU_STATIC, NULL);
   byte *p = buf;
 
-  packet_set(p, PKT_SNAPSHOT, gametic);
+  packet_set((packet_header_t* ) p, PKT_SNAPSHOT, gametic);
   p += sizeof(packet_header_t);
   net_snapshot_header_t *hdr = (net_snapshot_header_t*)p;
   hdr->leveltime = leveltime;

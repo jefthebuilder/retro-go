@@ -4,7 +4,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <math.h>
-#define SERVER_IP    "192.168.1.236"
+#define REGISTER_CONTROLLER    "http://192.168.1.236:8000/link_controller/"
 #define VIDEO_PORT   5005
 #define CONTROL_PORT 5006
 
@@ -14,62 +14,6 @@
 static int sock_video = -1;
 static int sock_control = -1;
 
-
-
-// forward declaration
-static void send_control_json(const char *json);
-
-// ------------------ CONTROL ------------------
-
-static void send_button_event(const char *key, bool pressed)
-{
-    char buf[128];
-    snprintf(buf, sizeof(buf),
-             "{\"type\":\"%s\",\"key\":\"%s\"}",
-             pressed ? "press" : "release", key);
-    send_control_json(buf);
-}
-
-static void poll_input(void)
-{
-    static uint32_t last_state = 0;
-    uint32_t joystick = rg_input_read_gamepad();
-
-    struct {
-        uint32_t mask;
-        const char *name;
-    } mapping[] = {
-        {RG_KEY_UP,     "UP"},
-        {RG_KEY_DOWN,   "DOWN"},
-        {RG_KEY_LEFT,   "LEFT"},
-        {RG_KEY_RIGHT,  "RIGHT"},
-        {RG_KEY_A,      "A"},
-        {RG_KEY_X,      "X"},
-        {RG_KEY_Y,      "Y"},
-        {RG_KEY_B,      "B"},
-        {RG_KEY_START,  "START"},
-        {RG_KEY_SELECT, "SELECT"},
-    };
-
-    for (int i = 0; i < sizeof(mapping)/sizeof(mapping[0]); i++) {
-        bool now = joystick & mapping[i].mask;
-        bool before = last_state & mapping[i].mask;
-        if (now && !before) send_button_event(mapping[i].name, true);
-        if (!now && before) send_button_event(mapping[i].name, false);
-    }
-
-    last_state = joystick;
-}
-
-static void send_control_json(const char *json)
-{
-    if (sock_control < 0) return;
-    send(sock_control, json, strlen(json), 0);
-}
-
-// ------------------ VIDEO ------------------
-
-// receiver_optimized.c
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,85 +22,148 @@ static void send_control_json(const char *json)
 #include <netinet/in.h>
 #include <unistd.h>
 
+esp_err_t multiplayer_server_event_get_handler(esp_http_client_event_handle_t evt)
+{
+    static char *output_buffer = NULL;  // Accumulates response if user_data not set
+    static int output_len = 0;
 
-#define PORT 5005
-#define MAX_FRAME_SIZE (320*240*2+8)  // adjust based on max expected size
-static void udp_image_server_task(void *pvParameters) {
-    int sock;
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t client_addr_len = sizeof(client_addr);
+    switch (evt->event_id)
+    {
+        case HTTP_EVENT_ON_DATA:
+            RG_LOGI( "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
 
-    static uint8_t frame_buf[MAX_FRAME_SIZE];
-    static uint8_t reassembly_buf[MAX_FRAME_SIZE];
-    int expected_chunks = 0;
-    int received_chunks = 0;
-    int frame_size = 0;
+            if (!esp_http_client_is_chunked_response(evt->client)) {
+                if (evt->user_data) {
+                    // Copy response into user-provided buffer
+                    memcpy(evt->user_data + output_len, evt->data, evt->data_len);
+                } else {
+                    // Allocate buffer if first chunk
+                    if (output_buffer == NULL) {
+                        int content_length = esp_http_client_get_content_length(evt->client);
+                        if (content_length <= 0) {
+                            content_length = 1024; // fallback size
+                        }
+                        output_buffer = (char *) malloc(content_length + 1); // +1 for null terminator
+                        if (output_buffer == NULL) {
+                            RG_LOGI( "Failed to allocate memory for output buffer");
+                            return ESP_FAIL;
+                        }
+                        output_len = 0;
+                    }
+                    memcpy(output_buffer + output_len, evt->data, evt->data_len);
+                }
+                output_len += evt->data_len;
+            }
+            break;
 
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) {
-        printf("Socket creation failed\n");
-        vTaskDelete(NULL);
+        case HTTP_EVENT_ON_FINISH:
+            RG_LOGI( "HTTP_EVENT_ON_FINISH");
+            if (output_buffer != NULL) {
+                output_buffer[output_len] = '\0'; // Null-terminate accumulated response
+                RG_LOGI( "HTTP response: %s", output_buffer);
+                free(output_buffer);
+                output_buffer = NULL;
+            }
+            output_len = 0;
+            break;
+
+        case HTTP_EVENT_DISCONNECTED:
+            RG_LOGI( "HTTP_EVENT_DISCONNECTED");
+            int mbedtls_err = 0;
+            esp_err_t err = esp_tls_get_and_clear_last_error(evt->data, &mbedtls_err, NULL);
+            if (err != 0) {
+                RG_LOGI( "Last esp error code: 0x%x", err);
+                RG_LOGI( "Last mbedtls failure: 0x%x", mbedtls_err);
+            }
+            if (output_buffer != NULL) {
+                free(output_buffer);
+                output_buffer = NULL;
+            }
+            output_len = 0;
+            break;
+
+        default:
+            break;
     }
 
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(PORT);
+    return ESP_OK;
+}
+char* send_https(const char* url, const char* post_data){
+        char response[512];
 
-    if (bind(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        printf("Bind failed\n");
-        close(sock);
-        vTaskDelete(NULL);
+    esp_http_client_config_t config = {
+            .url = url,
+            .method = HTTP_METHOD_POST,
+            .user_data =response,
+            .event_handler = multiplayer_server_event_get_handler
+        };
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+
+        
+
+        esp_http_client_set_header(client, "Content-Type", "application/json");
+        esp_http_client_set_post_field(client, post_data, strlen(post_data));
+
+        esp_err_t err = esp_http_client_perform(client);
+        if (err != ESP_OK) {
+            rg_gui_alert("Error", "Failed to contact server!");
+            esp_http_client_cleanup(client);
+            return NULL;
+        }
+
+        const char *buffer = response;
+        if (buffer) {
+            RG_LOGI("Server response: %s", buffer);
+
+            return buffer;
+        }
+        return NULL;
+}
+int  tank_id = 0;
+int asktank(){
+    const rg_gui_option_t gamemodes[] = {
+        {1, "1", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {2, "2", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {3, "3", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {4, "4", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {5, "5", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {6, "6", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {7, "7", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {8, "8", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        RG_DIALOG_END
+    };
+    return rg_gui_dialog("Select Tank", gamemodes, 0);
+}
+void register_to_tank(){
+    int tank_number = asktank();
+    char post_data[128];
+    snprintf(post_data, sizeof(post_data),
+             "http://192.168.1.236:8000/link_controller/%d",
+             tank_number);
+    char* response = send_https(post_data, "{}");
+    if (response) {
+        tank_id = atoi(response);
+        // is just a int response
+        RG_LOGI("Registered to tank: %s", response);
+    } else {
+        rg_gui_alert("Error", "No response from server!");
     }
 
-    printf("UDP server listening on port %d\n", PORT);
+}
+bool sended = false;
+void sendkey(char* act){
+    char post_data[128];
+    sended = true;
+    snprintf(post_data, sizeof(post_data),
+             "http://192.168.1.236:8000/send_action/%d/%s",
+             tank_number, act);
+    char* response = send_https(post_data, "{}");
+    
 
-    while (1) {
-        uint8_t packet[1500];
-        int len = recvfrom(sock, packet, sizeof(packet), 0,
-                           (struct sockaddr *)&client_addr, &client_addr_len);
-        if (len < 0) continue;
-
-        // First 2 bytes = chunk index
-        if (len < 2) continue;
-        uint16_t chunk_idx = (packet[0] << 8) | packet[1];
-        const uint8_t *payload = packet + 2;
-        int payload_len = len - 2;
-
-        // Store in reassembly buffer
-        int offset = chunk_idx * 1398; // CHUNK_SIZE - header (1400-2)
-        if (offset + payload_len <= MAX_FRAME_SIZE) {
-            memcpy(reassembly_buf + offset, payload, payload_len);
-        }
-
-        // (Optional) track received_chunks vs expected
-        // For simplicity, assume new frame starts with chunk_idx==0
-        if (chunk_idx == 0) {
-            received_chunks = 0;
-            expected_chunks = 0; // unknown until we detect frame end
-        }
-
-        received_chunks++;
-
-        // Heuristic: if packet smaller than full payload, assume end of frame
-        if (payload_len < 1398) {
-            frame_size = offset + payload_len;
-
-            // Frame is complete → decode
-            const uint16_t *data16 = (const uint16_t *)reassembly_buf;
-            uint16_t w = data16[0];
-            uint16_t h = data16[1];
-            rg_surface_t new_surface = {
-                .width = w,
-                .height = h,
-                .stride = w * 2,
-                .format = RG_PIXEL_565_LE,
-                .data = (void *)(data16 + 2),   // <-- skip header correctly
-            };
-        }
-    }
 }
 void cast_main(void)
 {
+    app = rg_system_reinit(AUDIO_SAMPLE_RATE, &handlers, NULL);
     rg_network_init();
     rg_network_wifi_start();
     if (rg_network_get_info().state != RG_NETWORK_CONNECTED)
@@ -168,28 +175,45 @@ void cast_main(void)
         }
         if (rg_network_get_info().state != RG_NETWORK_CONNECTED)
         {
-            RG_LOGI(stderr, "Warning: WiFi not connected, proceeding anyway.\n");
+            RG_LOGI("Warning: WiFi not connected, proceeding anyway.\n");
         }
     }
     RG_LOGI("connected to wifi");
+    
+    register_to_tank();
+    uint32_t joystick_old = -1;
+    uint32_t joystick = 0;
+    while (1)
+    {
+        joystick = rg_input_read_gamepad();
 
-
-    xTaskCreate(udp_image_server_task, "video_task", 16*1024, NULL, 5, NULL);
-
-    // open control socket
-    sock_control = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    struct sockaddr_in addr_ctrl = {
-        .sin_family = AF_INET,
-        .sin_port = htons(CONTROL_PORT),
-        .sin_addr.s_addr = inet_addr(SERVER_IP),
-    };
-    connect(sock_control, (struct sockaddr *)&addr_ctrl, sizeof(addr_ctrl));
-
-    // announce to server
-    send_control_json("{\"type\":\"hello\"}");
-
-    while (1) {
-        poll_input();
-        vTaskDelay(1);  // yield to FreeRTOS
+        if (joystick & (RG_KEY_MENU|RG_KEY_OPTION))
+        {
+            if (joystick & RG_KEY_MENU)
+            {
+                if (gnuboy_sram_dirty()) // save in case the user quits
+                    gnuboy_save_sram(sramFile, false);
+                rg_gui_game_menu();
+            }
+            else
+                rg_gui_options_menu();
+        }
+        else if (joystick != joystick_old)
+        {
+            int pad = 0;
+            sended = false;
+            if (joystick & RG_KEY_UP) sendkey("f");
+            if (joystick & RG_KEY_RIGHT) sendkey("r");
+            if (joystick & RG_KEY_DOWN) sendkey("b");
+            if (joystick & RG_KEY_LEFT)sendkey("l");
+            if (joystick & RG_KEY_SELECT) pad |= GB_PAD_SELECT;
+            if (joystick & RG_KEY_START) pad |= GB_PAD_START;
+            if (joystick & RG_KEY_A) sendkey("S");
+            if (joystick & RG_KEY_B) pad |= GB_PAD_B;
+            if (!sended) sendkey("N"); // stop
+            joystick_old = joystick;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
+    
 }

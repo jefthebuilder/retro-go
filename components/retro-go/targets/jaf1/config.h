@@ -8,7 +8,7 @@
 // #define RG_STORAGE_SDMMC_HOST       SDMMC_HOST_SLOT_1
 // #define RG_STORAGE_SDMMC_SPEED      SDMMC_FREQ_DEFAULT
 // #define RG_STORAGE_FLASH_PARTITION  "vfs"
-#define RG_USB_MSC                  0
+#define RG_USB_MSC                  1
 // GPIO Extender
 
 // Audio
@@ -74,8 +74,7 @@
 #define RG_BATTERY_ADC_UNIT         ADC_UNIT_2
 #define RG_BATTERY_ADC_CHANNEL      ADC_CHANNEL_3
 #define RG_BATTERY_CALC_VOLTAGE(raw) ((raw) * 1.51f * 0.001f)
-#define RG_BATTERY_CALC_PERCENT(raw) ((((raw) * 1.51f * 0.001f) - 3.5f) / (4.2f - 3.5f) * 100.f)
-
+#define RG_BATTERY_CALC_PERCENT(raw) ((((raw) * 1.51f * 0.001f) - 3.3f) / (4.2f - 3.3f) * 100.f)
 
 // Status LED
 //#define RG_GPIO_LED                 GPIO_NUM_14
