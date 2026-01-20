@@ -211,7 +211,7 @@ void rg_storage_init(void)
     disk_mounted = !error_code;
 
     if (disk_mounted){
-        link_usb_msc(card_handle);  // link USB MSC to the card
+        // link_usb_msc(card_handle);  // link USB MSC to the card
         RG_LOGI("Storage mounted at %s.", RG_STORAGE_ROOT);
 
     }
