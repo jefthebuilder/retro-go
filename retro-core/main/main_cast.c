@@ -6,12 +6,14 @@
 #include <math.h>
 #include "esp_http_client.h"
 #include "rg_gui.h"
-
+#include <stdio.h>
+#include <stdlib.h>
 // Forward declarations
 static inline void gui_clear(uint16_t color);
 void gui_rect(int x, int y, int w, int h, uint16_t color);
 char* send_https(const char* url, const char* post_data);
 void minimap_dot(int x, int y, uint16_t color);
+int  tank_id = 0;
 
 // Macro to create RGB565 color from 8-bit R, G, B values
 #define RG_RGB565(r, g, b) ((((r) >> 3) << 11) | (((g) >> 2) << 5) | ((b) >> 3))
@@ -162,7 +164,7 @@ void fetch_tank_state(void)
     stats.connected = true;
 
     // Expected: health,powerup,speed,ammo,isbot
-    // Example: "87,0,1.2,14,False"
+    // Example: "87,0,1.2,81,False"
 
     char isbot_str[8];
     sscanf(resp, "%d,%d,%f,%d,%7s",
@@ -185,7 +187,10 @@ void update_network_stats(void)
 }
 void minimap_update(void)
 {
-    char *json = send_https("http://192.168.1.236:8000/minimap", "{}");
+    char url[256]; // make sure the buffer is large enough
+    sprintf(url, "http://192.168.1.236:8000/minimap/%d", tank_number);
+
+    char *json = send_https(url, "{}");
     if (!json) return;
 
     cJSON *root = cJSON_Parse(json);
@@ -228,7 +233,7 @@ void minimap_draw(void)
         int y = map_y(minimap_tanks[i].y);
 
         uint16_t color;
-        if (distance_to_player(minimap_tanks[i].x, minimap_tanks[i].y) > MINIMAP_RADIUS)
+        if (distance_to_player(minimap_tanks[i].x, minimap_tanks[i].y) > MINIMAP_RADIUS && !minimap_tanks[i].isbot)
             continue;   // Out of range
         if (minimap_tanks[i].id == tank_number){
             color = RG_RGB565(0,255,0);      // YOU
@@ -236,7 +241,7 @@ void minimap_draw(void)
             player_y = minimap_tanks[i].y;
         }
         else if (minimap_tanks[i].isbot)
-            color = RG_RGB565(255,255,0);    // BOT
+            color = RG_RGB565(0,255,0);    // BOT
         else
             color = RG_RGB565(255,0,0);      // ENEMY
 
@@ -351,7 +356,7 @@ esp_err_t multiplayer_server_event_get_handler(esp_http_client_event_handle_t ev
 }
 char* send_https(const char* url, const char* post_data)
 {
-    static char response[1024];
+    static char response[4096];
 
     http_resp_t resp = {
         .buffer = response,
@@ -386,7 +391,6 @@ char* send_https(const char* url, const char* post_data)
 }
 
 
-int  tank_id = 0;
 int asktank(){
     const rg_gui_option_t gamemodes[] = {
         {1, "1", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
