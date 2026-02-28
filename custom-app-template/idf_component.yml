@@ -1,0 +1,15 @@
+## IDF Component Manager Manifest File
+## This allows the project to automatically fetch dependencies
+
+dependencies:
+  ## Uncomment to use ESP-IDF managed components
+  # espressif/button: "^3.0.0"
+  # espressif/led_strip: "^2.0.0"
+  
+  ## For standalone builds, you could reference retro-go as a git component:
+  # retro-go:
+  #   git: https://github.com/ducalex/retro-go.git
+  #   path: components/retro-go
+  
+  idf:
+    version: ">=5.0.0"

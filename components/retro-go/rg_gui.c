@@ -2302,7 +2302,9 @@ void rg_gui_game_menu(void)
         {2000, _("Save & Quit"),     NULL, RG_DIALOG_FLAG_NORMAL, NULL},
         {3001, _("Load game"),       NULL, RG_DIALOG_FLAG_NORMAL, NULL},
         {3000, _("Reset"),           NULL, RG_DIALOG_FLAG_NORMAL, NULL},
-
+        #ifdef RG_ENABLE_NETPLAY
+        {5000, _("Netplay"),         NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        #endif
         {5500, _("Options"),         NULL, have_option_btn ? RG_DIALOG_FLAG_HIDDEN : RG_DIALOG_FLAG_NORMAL, NULL},
         {6000, _("About"),           NULL, RG_DIALOG_FLAG_NORMAL, NULL},
         {7000, _("Quit"),            NULL, RG_DIALOG_FLAG_NORMAL, NULL},
@@ -2331,7 +2333,9 @@ void rg_gui_game_menu(void)
         case 3001: if ((slot = rg_gui_savestate_menu(_("Load"), rom_path)) >= 0) rg_emu_load_state(slot); break;
         case 3002: rg_emu_reset(false); break;
         case 3003: rg_emu_reset(true); break;
-
+        #ifdef RG_ENABLE_NETPLAY
+        case 5000: rg_gui_netplay_menu(); break;
+        #endif
         case 5500: rg_gui_options_menu(); break;
         case 6000: rg_gui_about_menu(); break;
         case 7000: rg_system_exit(); break;

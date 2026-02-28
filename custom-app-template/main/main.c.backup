@@ -1,0 +1,401 @@
+/**
+ * Custom App Template for Retro-Go
+ * Compatible with JAF1 and other ESP32 targets
+ */
+
+#include <rg_system.h>
+#include <string.h>
+#include <stdio.h>
+
+// App state
+typedef struct {
+    bool running;
+    int counter;
+    char message[128];
+} app_state_t;
+
+static app_state_t state = {
+    .running = true,
+    .counter = 0,
+    .message = "Hello from Custom App!",
+};
+void fetch_kills(void)
+{
+    char url[128];
+    snprintf(url, sizeof(url),
+        "http://192.168.1.236:8000/kills/%d",
+        tank_number);
+
+    char *resp = send_https(url, "{}");
+    if (resp)
+        stats.kills = atoi(resp);
+}
+
+void fetch_message(void)
+{
+    char url[128];
+    snprintf(url, sizeof(url),
+        "http://192.168.1.236:8000/message/%d",
+        tank_number);
+
+    char *resp = send_https(url, "{}");
+    if (resp && strlen(resp) > 0) {
+        strncpy(stats.message, resp, sizeof(stats.message) - 1);
+        stats.message[sizeof(stats.message) - 1] = '\0';
+    }
+}
+
+static int stats_timer = 0;
+
+
+
+void fetch_tank_state(void)
+{
+    char url[128];
+    snprintf(url, sizeof(url),
+        "http://192.168.1.236:8000/state/%d",
+        tank_number);
+
+    char *resp = send_https(url, "{}");
+    if (!resp || strlen(resp) < 3) {
+        stats.connected = false;
+        return;
+    }
+
+    stats.connected = true;
+
+    // Expected: health,powerup,speed,ammo,isbot
+    // Example: "87,0,1.2,81,False"
+
+    char isbot_str[8];
+    sscanf(resp, "%d,%d,%f,%d,%7s",
+           &stats.health,
+           &stats.powerup,
+           &stats.speed,
+           &stats.ammo,
+           isbot_str);
+
+    stats.isbot = (isbot_str[0] == 'T' || isbot_str[0] == 't');
+}
+void update_network_stats(void)
+{
+    if (++stats_timer >= 20) { // ~500ms
+        fetch_tank_state();
+        fetch_kills();
+        fetch_message();
+        stats_timer = 0;
+    }
+}
+void minimap_update(void)
+{
+    char url[256]; // make sure the buffer is large enough
+    sprintf(url, "http://192.168.1.236:8000/minimap/%d", tank_number);
+
+    char *json = send_https(url, "{}");
+    if (!json) return;
+
+    cJSON *root = cJSON_Parse(json);
+    if (!root) return;
+
+    minimap_count = 0;
+    cJSON *item;
+    cJSON_ArrayForEach(item, root) {
+        minimap_tanks[minimap_count].id =
+            atoi(cJSON_GetObjectItem(item, "id")->valuestring);
+
+        minimap_tanks[minimap_count].x =
+            cJSON_GetObjectItem(item, "x")->valuedouble;
+
+        minimap_tanks[minimap_count].y =
+            cJSON_GetObjectItem(item, "y")->valuedouble;
+
+        minimap_tanks[minimap_count].isbot =
+            cJSON_GetObjectItem(item, "isbot")->valueint;
+
+        minimap_count++;
+        if (minimap_count >= 16) break;
+    }
+
+    cJSON_Delete(root);
+}
+void minimap_dot(int x, int y, uint16_t color)
+{
+    rg_gui_draw_rect(x,y,3,3,0,color,color);
+    // Draw a small dot at (x, y) on the minimap
+    // Using a simple 3x3 pixel square
+    
+}
+void minimap_draw(void)
+{
+    minimap_draw_bg();
+
+    for (int i = 0; i < minimap_count; i++) {
+        int x = map_x(minimap_tanks[i].x);
+        int y = map_y(minimap_tanks[i].y);
+
+        uint16_t color;
+        if (distance_to_player(minimap_tanks[i].x, minimap_tanks[i].y) > MINIMAP_RADIUS && !minimap_tanks[i].isbot)
+            continue;   // Out of range
+        if (minimap_tanks[i].id == tank_number){
+            color = RG_RGB565(0,255,0);      // YOU
+            player_x = minimap_tanks[i].x;
+            player_y = minimap_tanks[i].y;
+        }
+        else if (minimap_tanks[i].isbot)
+            color = RG_RGB565(0,255,0);    // BOT
+        else
+            color = RG_RGB565(255,0,0);      // ENEMY
+
+        minimap_dot(x, y, color);
+    }
+}
+
+void gui_init(void)
+{
+    memset(gui_fb, 0, sizeof(gui_fb));
+
+    gui_surface.width  = GUI_W;
+    gui_surface.height = GUI_H;
+    gui_surface.stride = GUI_W;
+    gui_surface.offset = 0;
+    gui_surface.format = RG_PIXEL_565_LE;
+    gui_surface.palette = NULL;
+    gui_surface.data = gui_fb;
+    gui_surface.free_data = false;
+    gui_surface.free_palette = false;
+
+    currentUpdate = &gui_surface;
+}
+void gui_draw_stats(void)
+{
+    int y = 30;
+
+    gui_rect(0, 0, GUI_W, 24, RG_RGB565(20, 20, 20));
+    rg_gui_draw_text(8, 6, 200, "RETRO-GO TANK STATS", RG_RGB565(255,255,255), 0, 0);
+
+    char line[64];
+
+    // Status line
+    rg_gui_draw_text(
+        10, y, 200,
+        stats.connected ? "Status: CONNECTED" : "Status: DISCONNECTED",
+        stats.connected ? RG_RGB565(0,255,0) : RG_RGB565(255,0,0),
+        0, 0
+    );
+
+    snprintf(line, sizeof(line), "Health: %d", stats.health);
+    rg_gui_draw_text(10, y+20, 200, line, RG_RGB565(0,255,0), 0, 0);
+
+    snprintf(line, sizeof(line), "Ammo: %d", stats.ammo);
+    rg_gui_draw_text(10, y+40, 200, line, RG_RGB565(255,255,0), 0, 0);
+
+    snprintf(line, sizeof(line), "Speed: %.2f", stats.speed);
+    rg_gui_draw_text(10, y+60, 200, line, RG_RGB565(100,200,255), 0, 0);
+
+    snprintf(line, sizeof(line), "Kills: %d", stats.kills);
+    rg_gui_draw_text(10, y+80, 200, line, RG_RGB565(255,100,100), 0, 0);
+
+    snprintf(line, sizeof(line), "Powerup: %d", stats.powerup);
+    rg_gui_draw_text(10, y+100, 200, line, RG_RGB565(200,100,255), 0, 0);
+
+    // Display message if available
+    if (strlen(stats.message) > 0) {
+        rg_gui_draw_rect(0, GUI_H - 30, GUI_W, 30,0,0,RG_RGB565(40, 40, 40));
+        rg_gui_draw_text(5, GUI_H - 24, 310, stats.message, RG_RGB565(255,255,100), 0, 0);
+    }
+
+    minimap_draw();
+
+    rg_display_submit(currentUpdate, 0);
+}
+
+static inline void gui_clear(uint16_t color)
+{
+    rg_gui_draw_rect(
+        0,
+        0,
+        GUI_W,
+        GUI_H,
+        0,
+        0,
+
+        color
+    );
+    
+}
+void gui_rect(int x, int y, int w, int h, uint16_t color)
+{
+    for (int j = 0; j < h; j++)
+        for (int i = 0; i < w; i++)
+            gui_fb[(y + j) * GUI_W + (x + i)] = color;
+}
+
+esp_err_t multiplayer_server_event_get_handler(esp_http_client_event_handle_t evt)
+{
+    http_resp_t *resp = (http_resp_t *)evt->user_data;
+
+    switch (evt->event_id) {
+        case HTTP_EVENT_ON_DATA:
+            if (!resp || !evt->data_len) break;
+
+            int copy_len = evt->data_len;
+            if (resp->length + copy_len >= resp->max_len) {
+                copy_len = resp->max_len - resp->length - 1;
+            }
+
+            if (copy_len > 0) {
+                memcpy(resp->buffer + resp->length, evt->data, copy_len);
+                resp->length += copy_len;
+                resp->buffer[resp->length] = '\0';
+            }
+            break;
+
+        default:
+            break;
+    }
+    return ESP_OK;
+}
+char* send_https(const char* url, const char* post_data)
+{
+    static char response[4096];
+
+    http_resp_t resp = {
+        .buffer = response,
+        .length = 0,
+        .max_len = sizeof(response)
+    };
+
+    memset(response, 0, sizeof(response));
+
+    esp_http_client_config_t config = {
+        .url = url,
+        .method = HTTP_METHOD_GET,
+        .event_handler = multiplayer_server_event_get_handler,
+        .user_data = &resp
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_post_field(client, post_data, strlen(post_data));
+
+    esp_err_t err = esp_http_client_perform(client);
+    if (err != ESP_OK) {
+        RG_LOGI("HTTP error: %s", esp_err_to_name(err));
+        esp_http_client_cleanup(client);
+        return NULL;
+    }
+
+    esp_http_client_cleanup(client);
+    RG_LOGI("Server response: %s", response);
+    return response;
+}
+
+
+int asktank(){
+    const rg_gui_option_t gamemodes[] = {
+        {1, "1", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {2, "2", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {3, "3", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {4, "4", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {5, "5", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {6, "6", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {7, "7", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        {8, "8", NULL, RG_DIALOG_FLAG_NORMAL, NULL},
+        RG_DIALOG_END
+    };
+    return rg_gui_dialog("Select Tank", gamemodes, 0);
+}
+void register_to_tank(){
+    tank_number = asktank();
+    char post_data[128];
+    snprintf(post_data, sizeof(post_data),
+             "http://192.168.1.236:8000/link_controller/%d",
+             tank_number);
+    char* response = send_https(post_data, "{}");
+    if (response) {
+        tank_id = atoi(response);
+        // is just a int response
+        RG_LOGI("Registered to tank: %s", response);
+    } else {
+        rg_gui_alert("Error", "No response from server!");
+    }
+
+}
+bool sended = false;
+void sendkey(char* act){
+    char post_data[128];
+    snprintf(post_data, sizeof(post_data),
+             "http://192.168.1.236:8000/send_action/%d/%s",
+             tank_number, act);
+    send_https(post_data, "{}");
+    sended = true;
+    
+
+}
+void app_main(void)
+{
+    app = rg_system_reinit(AUDIO_SAMPLE_RATE, NULL, NULL);
+    rg_network_init();
+    rg_network_wifi_start();
+    if (rg_network_get_info().state != RG_NETWORK_CONNECTED)
+    {
+        int retry = 0;
+        while (rg_network_get_info().state != RG_NETWORK_CONNECTED && retry++ < 50)
+        {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (rg_network_get_info().state != RG_NETWORK_CONNECTED)
+        {
+            RG_LOGI("Warning: WiFi not connected, proceeding anyway.\n");
+        }
+    }
+    RG_LOGI("connected to wifi");
+    
+    register_to_tank();
+    uint32_t joystick_old = -1;
+    uint32_t joystick = 0;
+    gui_clear(RG_RGB565(0, 0, 0)); // black background
+
+    while (1)
+    {
+        joystick = rg_input_read_gamepad();
+        update_network_stats();
+        
+        
+        static int minimap_timer = 0;
+        if (++minimap_timer > 15) {   // ~500ms
+            minimap_update();
+            minimap_timer = 0;
+
+        }
+        gui_draw_stats();
+
+        if (joystick & (RG_KEY_MENU|RG_KEY_OPTION))
+        {
+            
+            if (joystick & RG_KEY_MENU)
+            {
+                
+                rg_gui_game_menu();
+            }
+            else
+                rg_gui_options_menu();
+            gui_clear(RG_RGB565(0, 0, 0)); // black background
+            
+        }
+        else if (joystick != joystick_old)
+        {
+            sended = false;
+            sendkey("N");
+            if (joystick & RG_KEY_UP) sendkey("F");
+            if (joystick & RG_KEY_RIGHT) sendkey("R");
+            if (joystick & RG_KEY_DOWN) sendkey("B");
+            if (joystick & RG_KEY_LEFT)sendkey("L");
+            if (joystick & RG_KEY_A) sendkey("S");
+            joystick_old = joystick;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    
+}

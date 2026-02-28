@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="blargg">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/retro-core/components/gnuboy/tests/blargg.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

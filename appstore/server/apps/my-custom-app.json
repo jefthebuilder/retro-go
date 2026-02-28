@@ -1,0 +1,11 @@
+{
+  "name": "My Custom App",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "description": "A custom application built with the Retro-Go template",
+  "category": "utility",
+  "extensions": "",
+  "size": 378224,
+  "uploaded_at": "2026-01-25T16:20:36.342011",
+  "binary": "appstore/server/apps/my-custom-app.bin"
+}

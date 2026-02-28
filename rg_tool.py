@@ -99,6 +99,17 @@ def build_image(output_file, apps, img_format="esp32", fatsize=0):
         table_ota += 1
         image_data += data + b"\xFF" * (part_size - len(data))
 
+    # Add dynamic app slots for app store downloads
+    # For 8MB flash: 3 slots x 1.56MB each = 4.7MB for downloadable apps
+    # Sizes must be aligned to 64KB (0x10000) boundaries
+    app_slot_size = 1638400  # 25 * 65536 = 1.56 MB per slot (0x190000)
+    app_slot_count = 3       # 3 slots for 8MB devices (supports larger apps like PrBoom)
+    for slot in range(1, app_slot_count + 1):
+        slot_offset = len(image_data)
+        table_csv.append("app_slot_%d, app, ota_%d, %d, %d" % (slot, table_ota, slot_offset, app_slot_size))
+        table_ota += 1
+        image_data += b"\xFF" * app_slot_size
+
     if fatsize:
         # Use "vfs" label, same as MicroPython, in case the storage is to be shared with a MicroPython install
         table_csv.append("vfs, data, fat, %d, %s" % (len(image_data), fatsize))

@@ -1,4 +1,11 @@
+// Binary-safe HTTP GET using event handler (for large/binary responses)
+
+// Binary HTTP GET for raw data (e.g. RGB565 frames)
+
+#include <stdint.h>
 #include "shared.h"
+// Binary HTTP GET for raw data (e.g. RGB565 frames)
+int send_https_binary(const char* url, uint8_t* buf, int max_len);
 #include <lwip/sockets.h>
 #include <cJSON.h>
 #include <freertos/FreeRTOS.h>
@@ -8,12 +15,21 @@
 #include "rg_gui.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "esp_http_client.h"
+// For HTTP raw RGB565 stream
+#include <esp_http_client.h>
+
 // Forward declarations
 static inline void gui_clear(uint16_t color);
 void gui_rect(int x, int y, int w, int h, uint16_t color);
 char* send_https(const char* url, const char* post_data);
 void minimap_dot(int x, int y, uint16_t color);
 int  tank_id = 0;
+typedef struct {
+    uint8_t* buffer;
+    int length;
+    int max_len;
+} http_resp_bin_t;
 
 // Macro to create RGB565 color from 8-bit R, G, B values
 #define RG_RGB565(r, g, b) ((((r) >> 3) << 11) | (((g) >> 2) << 5) | ((b) >> 3))
@@ -60,8 +76,9 @@ void minimap_draw_bg(void)
     rg_gui_draw_rect(MINIMAP_X, MINIMAP_Y, MINIMAP_SIZE, MINIMAP_SIZE, 1,
                       RG_RGB565(255, 255, 255), RG_RGB565(0, 0, 0));
 
-    
+
 }
+
 typedef struct {
     int id;
     float x;
@@ -85,11 +102,90 @@ static rg_surface_t *currentUpdate;
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include "esp_heap_caps.h"
 #define GUI_W 320
 #define GUI_H 240
 
 static rg_surface_t gui_surface;
-static uint16_t gui_fb[GUI_W * GUI_H];
+static uint16_t *gui_fb = NULL; // PSRAM
+
+#define STREAM_FRAME_MAX (GUI_W * GUI_H * 2)
+
+// Double-buffer to avoid tearing while HTTP client writes into the same buffer the GUI reads.
+static uint8_t *stream_rgb_buf_front = NULL; // last known-good frame
+static uint8_t *stream_rgb_buf_back  = NULL; // network write buffer
+static volatile int stream_rgb_len = 0;
+
+// Fetch raw RGB565 frame from backend using send_https_binary
+// Initialize buffers (call once)
+void init_stream_buffers(void) {
+    if (!stream_rgb_buf_front)
+        stream_rgb_buf_front = heap_caps_malloc(STREAM_FRAME_MAX, MALLOC_CAP_SPIRAM);
+    if (!stream_rgb_buf_back)
+        stream_rgb_buf_back = heap_caps_malloc(STREAM_FRAME_MAX, MALLOC_CAP_SPIRAM);
+    if (!gui_fb)
+        gui_fb = heap_caps_malloc(STREAM_FRAME_MAX, MALLOC_CAP_SPIRAM);
+}
+
+// HTTP binary event handler
+esp_err_t multiplayer_server_event_bin_handler(esp_http_client_event_handle_t evt) {
+    http_resp_bin_t *resp = (http_resp_bin_t *)evt->user_data;
+    if (!resp) return ESP_OK;
+
+    if (evt->event_id == HTTP_EVENT_ON_DATA && evt->data_len > 0) {
+        int remaining = resp->max_len - resp->length;
+        int copy_len = (evt->data_len < remaining) ? evt->data_len : remaining;
+        if (copy_len > 0) {
+            memcpy(resp->buffer + resp->length, evt->data, copy_len);
+            resp->length += copy_len;
+        }
+    }
+    return ESP_OK;
+}
+
+// Fetch raw RGB565 frame over HTTP
+int fetch_stream_frame(int cam_id) {
+    if (!stream_rgb_buf_back || !stream_rgb_buf_front) return 0;
+
+    char url[128];
+    snprintf(url, sizeof(url), "http://192.168.1.236:8000/stream_jaf/%d", cam_id);
+
+    // Clear back buffer
+    memset(stream_rgb_buf_back, 0, STREAM_FRAME_MAX);
+
+    http_resp_bin_t resp = {
+        .buffer = stream_rgb_buf_back,
+        .length = 0,
+        .max_len = STREAM_FRAME_MAX
+    };
+
+    esp_http_client_config_t config = {
+        .url = url,
+        .method = HTTP_METHOD_GET,
+        .event_handler = multiplayer_server_event_bin_handler,
+        .user_data = &resp,
+        .timeout_ms = 5000
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    esp_err_t err = esp_http_client_perform(client);
+    esp_http_client_cleanup(client);
+
+    if (err != ESP_OK || resp.length != STREAM_FRAME_MAX) {
+        return 0; // partial frame discarded
+    }
+
+    // Swap buffers after full frame
+    uint8_t *tmp = stream_rgb_buf_front;
+    stream_rgb_buf_front = stream_rgb_buf_back;
+    stream_rgb_buf_back = tmp;
+    stream_rgb_len = STREAM_FRAME_MAX;
+
+    return STREAM_FRAME_MAX;
+}
+
+// Draw frame + optional overlays
+
 
 typedef struct {
     int health;
@@ -222,11 +318,11 @@ void minimap_dot(int x, int y, uint16_t color)
     rg_gui_draw_rect(x,y,3,3,0,color,color);
     // Draw a small dot at (x, y) on the minimap
     // Using a simple 3x3 pixel square
-    
+
 }
 void minimap_draw(void)
 {
-    minimap_draw_bg();
+    //minimap_draw_bg();
 
     for (int i = 0; i < minimap_count; i++) {
         int x = map_x(minimap_tanks[i].x);
@@ -251,11 +347,23 @@ void minimap_draw(void)
 
 void gui_init(void)
 {
-    memset(gui_fb, 0, sizeof(gui_fb));
+    if (!gui_fb) {
+        gui_fb = (uint16_t *)heap_caps_malloc(GUI_W * GUI_H * sizeof(uint16_t), MALLOC_CAP_SPIRAM);
+        if (gui_fb) memset(gui_fb, 0, GUI_W * GUI_H * sizeof(uint16_t));
+    }
+
+    if (!stream_rgb_buf_front) {
+        stream_rgb_buf_front = (uint8_t *)heap_caps_malloc(STREAM_FRAME_MAX, MALLOC_CAP_SPIRAM);
+        if (stream_rgb_buf_front) memset(stream_rgb_buf_front, 0, STREAM_FRAME_MAX);
+    }
+    if (!stream_rgb_buf_back) {
+        stream_rgb_buf_back = (uint8_t *)heap_caps_malloc(STREAM_FRAME_MAX, MALLOC_CAP_SPIRAM);
+        if (stream_rgb_buf_back) memset(stream_rgb_buf_back, 0, STREAM_FRAME_MAX);
+    }
 
     gui_surface.width  = GUI_W;
     gui_surface.height = GUI_H;
-    gui_surface.stride = GUI_W;
+    gui_surface.stride = GUI_W*2;
     gui_surface.offset = 0;
     gui_surface.format = RG_PIXEL_565_LE;
     gui_surface.palette = NULL;
@@ -269,33 +377,19 @@ void gui_draw_stats(void)
 {
     int y = 30;
 
-    gui_rect(0, 0, GUI_W, 24, RG_RGB565(20, 20, 20));
-    rg_gui_draw_text(8, 6, 200, "RETRO-GO TANK STATS", RG_RGB565(255,255,255), 0, 0);
+    // gui_rect(0, 0, GUI_W, 24, RG_RGB565(20, 20, 20));
 
     char line[64];
 
     // Status line
-    rg_gui_draw_text(
-        10, y, 200,
-        stats.connected ? "Status: CONNECTED" : "Status: DISCONNECTED",
-        stats.connected ? RG_RGB565(0,255,0) : RG_RGB565(255,0,0),
-        0, 0
-    );
+
 
     snprintf(line, sizeof(line), "Health: %d", stats.health);
-    rg_gui_draw_text(10, y+20, 200, line, RG_RGB565(0,255,0), 0, 0);
+    rg_gui_draw_text(10, y, 200, line, RG_RGB565(0,255,0), 0, 0);
 
     snprintf(line, sizeof(line), "Ammo: %d", stats.ammo);
-    rg_gui_draw_text(10, y+40, 200, line, RG_RGB565(255,255,0), 0, 0);
+    rg_gui_draw_text(10, y+20, 200, line, RG_RGB565(255,255,0), 0, 0);
 
-    snprintf(line, sizeof(line), "Speed: %.2f", stats.speed);
-    rg_gui_draw_text(10, y+60, 200, line, RG_RGB565(100,200,255), 0, 0);
-
-    snprintf(line, sizeof(line), "Kills: %d", stats.kills);
-    rg_gui_draw_text(10, y+80, 200, line, RG_RGB565(255,100,100), 0, 0);
-
-    snprintf(line, sizeof(line), "Powerup: %d", stats.powerup);
-    rg_gui_draw_text(10, y+100, 200, line, RG_RGB565(200,100,255), 0, 0);
 
     // Display message if available
     if (strlen(stats.message) > 0) {
@@ -305,7 +399,26 @@ void gui_draw_stats(void)
 
     minimap_draw();
 
-    rg_display_submit(currentUpdate, 0);
+    // NOTE: Do not submit here; cast_main submits once per frame after composing.
+}
+void draw_stream_frame(void) {
+    if (stream_rgb_len != STREAM_FRAME_MAX || !stream_rgb_buf_front) return;
+
+    // --- Draw raw video ---
+    // rg_display_write_rect(0, 0, GUI_W, GUI_H, GUI_W*2, (uint16_t*)stream_rgb_buf_front, 0);
+
+    // --- Draw overlays ---
+    // Copy network buffer to gui_fb for overlays
+    for (int y = 0; y < GUI_H; y++) {
+        uint16_t *src_line = (uint16_t *)(stream_rgb_buf_front + y * GUI_W * 2);
+        uint16_t *dst_line = gui_fb + y * GUI_W;
+        memcpy(dst_line, src_line, GUI_W * 2);
+    }
+
+    gui_draw_stats(); // overlays
+
+    // Display framebuffer with overlays (also allow automatic swap)
+    rg_display_write_rect(0, 0, GUI_W, GUI_H, GUI_W*2, gui_fb, 0);
 }
 
 static inline void gui_clear(uint16_t color)
@@ -320,7 +433,7 @@ static inline void gui_clear(uint16_t color)
 
         color
     );
-    
+
 }
 void gui_rect(int x, int y, int w, int h, uint16_t color)
 {
@@ -429,9 +542,10 @@ void sendkey(char* act){
              tank_number, act);
     send_https(post_data, "{}");
     sended = true;
-    
+
 
 }
+
 void cast_main(void)
 {
     app = rg_system_reinit(AUDIO_SAMPLE_RATE, NULL, NULL);
@@ -450,38 +564,42 @@ void cast_main(void)
         }
     }
     RG_LOGI("connected to wifi");
-    
+
     register_to_tank();
     uint32_t joystick_old = -1;
     uint32_t joystick = 0;
     gui_clear(RG_RGB565(0, 0, 0)); // black background
 
+    gui_init(); // Ensure PSRAM buffers allocated
+
+    int overlay_timer = 0;
+    int minimap_timer = 0;
+
     while (1)
     {
         joystick = rg_input_read_gamepad();
         update_network_stats();
-        
-        
-        static int minimap_timer = 0;
-        if (++minimap_timer > 15) {   // ~500ms
+
+        if (fetch_stream_frame(tank_id)) {
+            draw_stream_frame();
+        }
+        rg_display_submit(currentUpdate, 0);
+        if (minimap_timer++ >= 10) { // Update minimap every ~100ms
             minimap_update();
             minimap_timer = 0;
-
         }
-        gui_draw_stats();
+        // Redraw overlays at a lower rate to reduce flicker.
+        // Video is updated every loop; UI text/minimap is updated ~10 FPS.
+            overlay_timer = 0;
+            gui_draw_stats();
+
 
         if (joystick & (RG_KEY_MENU|RG_KEY_OPTION))
         {
-            
             if (joystick & RG_KEY_MENU)
-            {
-                
                 rg_gui_game_menu();
-            }
             else
                 rg_gui_options_menu();
-            gui_clear(RG_RGB565(0, 0, 0)); // black background
-            
         }
         else if (joystick != joystick_old)
         {
@@ -492,10 +610,15 @@ void cast_main(void)
             if (joystick & RG_KEY_DOWN) sendkey("B");
             if (joystick & RG_KEY_LEFT)sendkey("L");
             if (joystick & RG_KEY_A) sendkey("S");
-            if (!sended)  // stop
             joystick_old = joystick;
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-    
+
+    // Free PSRAM buffers if needed (on exit)
+    if (gui_fb) heap_caps_free(gui_fb);
+    if (stream_rgb_buf_front) heap_caps_free(stream_rgb_buf_front);
+    if (stream_rgb_buf_back) heap_caps_free(stream_rgb_buf_back);
 }
+
+

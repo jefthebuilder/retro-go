@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="nes-test-roms-master">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/retro-core/components/nofrendo/docs/nes-test-roms-master.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

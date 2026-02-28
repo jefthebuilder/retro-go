@@ -1,6 +1,7 @@
 dependencies:
   espressif/esp_tinyusb:
-    component_hash: 96d232ced7afe1976119b62f7fbf1944a2a78b36228ff6f7b9318394ac1153cc
+    component_hash: 
+      96d232ced7afe1976119b62f7fbf1944a2a78b36228ff6f7b9318394ac1153cc
     dependencies:
     - name: idf
       require: private
@@ -14,7 +15,8 @@ dependencies:
       type: service
     version: 1.7.6~1
   espressif/tinyusb:
-    component_hash: aa65639878f27a44d349044afd9c3fc134a92bd560874fdac1d836019b5c07ca
+    component_hash: 
+      aa65639878f27a44d349044afd9c3fc134a92bd560874fdac1d836019b5c07ca
     dependencies:
     - name: idf
       require: private
@@ -30,7 +32,7 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.5.1
+    version: 5.5.2
 direct_dependencies:
 - espressif/esp_tinyusb
 - idf

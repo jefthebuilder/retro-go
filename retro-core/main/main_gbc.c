@@ -3,6 +3,57 @@
 #include <sys/time.h>
 #include <gnuboy.h>
 
+#ifdef RG_ENABLE_NETPLAY
+#include <rg_netplay_emu.h>
+
+// Netplay state serialization
+static bool netplay_save_state(void **data, size_t *size)
+{
+    // Use a memory buffer for state save
+    void *buffer = malloc(200 * 1024);  // Allocate 200KB for state
+    if (!buffer)
+        return false;
+    
+    // Save state to memory (we'd need to add this to gnuboy)
+    int result = gnuboy_save_state_mem(buffer, 200 * 1024, (int*)size);
+    if (result != 0)
+    {
+        free(buffer);
+        return false;
+    }
+    
+    *data = buffer;
+    return true;
+}
+
+static bool netplay_load_state(const void *data, size_t size)
+{
+    return gnuboy_load_state_mem(data, size) == 0;
+}
+
+static void netplay_apply_input(uint8_t player, uint32_t buttons, int16_t analog_x, int16_t analog_y)
+{
+    // Convert retro-go buttons to gnuboy pad
+    int pad = 0;
+    if (buttons & RG_KEY_UP) pad |= GB_PAD_UP;
+    if (buttons & RG_KEY_RIGHT) pad |= GB_PAD_RIGHT;
+    if (buttons & RG_KEY_DOWN) pad |= GB_PAD_DOWN;
+    if (buttons & RG_KEY_LEFT) pad |= GB_PAD_LEFT;
+    if (buttons & RG_KEY_SELECT) pad |= GB_PAD_SELECT;
+    if (buttons & RG_KEY_START) pad |= GB_PAD_START;
+    if (buttons & RG_KEY_A) pad |= GB_PAD_A;
+    if (buttons & RG_KEY_B) pad |= GB_PAD_B;
+    gnuboy_set_pad(pad);
+}
+
+static uint32_t netplay_get_local_input(uint8_t player, int16_t *analog_x, int16_t *analog_y)
+{
+    if (analog_x) *analog_x = 0;
+    if (analog_y) *analog_y = 0;
+    return rg_input_read_gamepad();
+}
+#endif // RG_ENABLE_NETPLAY
+
 static int skipFrames = 0;
 static bool slowFrame = false;
 
@@ -312,12 +363,56 @@ void gbc_main(void)
 
     // Ready!
 
+#ifdef RG_ENABLE_NETPLAY
+    // Initialize netplay if requested
+    if (app->bootFlags & RG_BOOT_NETPLAY)
+    {
+        rg_netplay_emu_config_t netplay_config = {
+            .serialize_state = netplay_save_state,
+            .deserialize_state = netplay_load_state,
+            .apply_input = netplay_apply_input,
+            .get_input = netplay_get_local_input,
+            .input_delay_frames = 2,
+            .use_rollback = true,
+        };
+        
+        if (!rg_netplay_emu_init(&netplay_config))
+        {
+            RG_LOGE("Failed to initialize netplay");
+        }
+        else
+        {
+            RG_LOGI("Netplay initialized for Game Boy");
+        }
+    }
+#endif
+
     uint32_t joystick_old = -1;
     uint32_t joystick = 0;
 
     while (true)
     {
-        joystick = rg_input_read_gamepad();
+#ifdef RG_ENABLE_NETPLAY
+        if (rg_netplay_emu_is_active())
+        {
+            rg_netplay_emu_begin_frame();
+            
+            // Get input from netplay
+            uint32_t net_buttons;
+            if (rg_netplay_emu_get_input(0, &net_buttons, NULL, NULL))
+            {
+                joystick = net_buttons;
+            }
+            
+            // Send local input
+            uint32_t local_input = rg_input_read_gamepad();
+            rg_netplay_emu_set_input(local_input, 0, 0);
+        }
+        else
+#endif
+        {
+            joystick = rg_input_read_gamepad();
+        }
 
         if (joystick & (RG_KEY_MENU|RG_KEY_OPTION))
         {
@@ -356,6 +451,13 @@ void gbc_main(void)
             gnuboy_set_framebuffer(currentUpdate->data);
         }
         gnuboy_run(drawFrame);
+
+#ifdef RG_ENABLE_NETPLAY
+        if (rg_netplay_emu_is_active())
+        {
+            rg_netplay_emu_end_frame();
+        }
+#endif
 
         if (autoSaveSRAM > 0)
         {

@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="cdc_seed_corpus3">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/launcher/managed_components/espressif__tinyusb/test/fuzz/device/cdc/cdc_seed_corpus.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

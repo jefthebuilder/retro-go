@@ -1,0 +1,38 @@
+{
+  "app": {
+    "id": "com.example.mygame",
+    "name": "My Retro Game",
+    "version": "1.0.0",
+    "description": "A fun retro game for Retro-Go devices",
+    "author": "Game Developer",
+    "license": "MIT",
+    "category": "game",
+    "icon": "icon.png",
+    "screenshots": [
+      "screenshot1.png",
+      "screenshot2.png"
+    ]
+  },
+  "device": {
+    "min_version": "1.0.0",
+    "required_space": 5242880,
+    "supported_models": [
+      "ODROID-GO",
+      "MRGC-G32",
+      "generic-esp32s3"
+    ]
+  },
+  "store": {
+    "price": 0.99,
+    "currency": "USD",
+    "rating": 4.5,
+    "downloads": 1234,
+    "featured": false,
+    "tags": ["game", "action", "retro"]
+  },
+  "permissions": [
+    "storage",
+    "network",
+    "bluetooth"
+  ]
+}
